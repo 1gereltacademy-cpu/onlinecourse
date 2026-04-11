@@ -19,7 +19,7 @@ export default async function CourseDetailPage({ params, searchParams }) {
     .from("courses")
     .select("*")
     .eq("id", params.id)
-    .single();
+    .maybeSingle();
 
   const { data: lessons } = await supabase
     .from("lessons")
