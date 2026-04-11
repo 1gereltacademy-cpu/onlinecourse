@@ -34,7 +34,7 @@ export default function AdminCreateLessonForm({ courses }) {
       const safeName = `${Date.now()}-${videoFile.name.replace(/\s+/g, "-")}`;
 
       const { error: uploadError } = await supabase.storage
-        .from("videos")
+        .from("videos-private-lessons")
         .upload(safeName, videoFile, {
           cacheControl: "3600",
           upsert: false,
