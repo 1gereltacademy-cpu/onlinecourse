@@ -33,22 +33,23 @@ export default function AdminCreateLessonForm({ courses }) {
     try {
       const safeName = `${Date.now()}-${videoFile.name.replace(/\s+/g, "-")}`;
 
-      const { error: uploadError } = await supabase.storage
+      const { error } = await supabase.storage
         .from("videos-private")
         .upload(safeName, videoFile, {
           cacheControl: "3600",
           upsert: false,
         });
 
-      if (uploadError) {
-        throw new Error(uploadError.message || "Видео upload алдаа");
+      if (error) {
+        throw new Error(error.message || "Видео upload алдаа");
       }
 
-      const { data: publicUrlData } = supabase.storage
-        .from("videos")
-        .getPublicUrl(safeName);
+      setForm((prev) => ({
+        ...prev,
+        video_path: safeName,
+      }));
 
-      return publicUrlData?.publicUrl || "";
+      return safeName;
     } finally {
       setUploadingVideo(false);
     }
@@ -65,8 +66,8 @@ export default function AdminCreateLessonForm({ courses }) {
       let finalVideoUrl = form.video_url.trim();
 
       if (videoFile) {
-        finalVideoUrl = await uploadPrivateVideo();
-        finalVideoPath = "";
+        finalVideoPath = await uploadPrivateVideo();
+        finalVideoUrl = "";
       }
 
       const res = await fetch("/api/admin/create-lesson", {
@@ -133,7 +134,9 @@ export default function AdminCreateLessonForm({ courses }) {
           className="w-full rounded-2xl bg-white/10 p-3 text-white"
           placeholder="Video link (optional)"
           value={form.video_url}
-          onChange={(e) => setForm({ ...form, video_url: e.target.value })}
+          onChange={(e) =>
+            setForm({ ...form, video_url: e.target.value, video_path: "" })
+          }
         />
 
         <div className="mt-3 text-xs text-slate-400">
@@ -142,8 +145,17 @@ export default function AdminCreateLessonForm({ courses }) {
 
         <input
           type="file"
-          accept="video/mp4,video/webm,video/ogg,video/quicktime"
-          onChange={(e) => setVideoFile(e.target.files?.[0] || null)}
+          accept="video/mp4,video/webm,video/ogg,video/quicktime,video/x-m4v,.m3u8"
+          onChange={(e) => {
+            const file = e.target.files?.[0] || null;
+            setVideoFile(file);
+            if (file) {
+              setForm((prev) => ({
+                ...prev,
+                video_url: "",
+              }));
+            }
+          }}
           className="mt-3 w-full rounded-2xl bg-white/10 p-3 text-white file:mr-4 file:rounded-xl file:border-0 file:bg-white file:px-3 file:py-2 file:text-slate-900"
         />
 

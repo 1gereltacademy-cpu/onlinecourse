@@ -6,6 +6,7 @@ export default function AdminEditLessonForm({ lesson }) {
   const [form, setForm] = useState({
     title: lesson.title || "",
     video_url: lesson.video_url || "",
+    video_path: lesson.video_path || "",
     duration: lesson.duration || "",
     position: lesson.position || 0,
     thumbnail_url: lesson.thumbnail_url || "",
@@ -16,7 +17,6 @@ export default function AdminEditLessonForm({ lesson }) {
 
   async function handleSubmit(e) {
     e.preventDefault();
-
     if (loading) return;
 
     try {
@@ -31,6 +31,7 @@ export default function AdminEditLessonForm({ lesson }) {
           id: lesson.id,
           title: form.title,
           video_url: form.video_url.trim(),
+          video_path: form.video_path.trim(),
           duration: form.duration,
           position: Number(form.position || 0),
           thumbnail_url: form.thumbnail_url,
@@ -65,6 +66,7 @@ export default function AdminEditLessonForm({ lesson }) {
     <form onSubmit={handleSubmit} className="mt-4 space-y-3">
       <input
         className="w-full rounded-2xl bg-white/10 p-3 text-white"
+        placeholder="Lesson title"
         value={form.title}
         onChange={(e) => setForm({ ...form, title: e.target.value })}
       />
@@ -78,6 +80,14 @@ export default function AdminEditLessonForm({ lesson }) {
 
       <input
         className="w-full rounded-2xl bg-white/10 p-3 text-white"
+        placeholder="Video path"
+        value={form.video_path}
+        onChange={(e) => setForm({ ...form, video_path: e.target.value })}
+      />
+
+      <input
+        className="w-full rounded-2xl bg-white/10 p-3 text-white"
+        placeholder="Duration"
         value={form.duration}
         onChange={(e) => setForm({ ...form, duration: e.target.value })}
       />
@@ -85,12 +95,14 @@ export default function AdminEditLessonForm({ lesson }) {
       <input
         type="number"
         className="w-full rounded-2xl bg-white/10 p-3 text-white"
+        placeholder="Position"
         value={form.position}
         onChange={(e) => setForm({ ...form, position: e.target.value })}
       />
 
       <input
         className="w-full rounded-2xl bg-white/10 p-3 text-white"
+        placeholder="Thumbnail URL"
         value={form.thumbnail_url}
         onChange={(e) => setForm({ ...form, thumbnail_url: e.target.value })}
       />
