@@ -26,7 +26,6 @@ export default async function CourseDetailPage({ params, searchParams }) {
     .select("*")
     .eq("course_id", params.id)
     .order("position", { ascending: true });
-
   if (!course) {
     return (
       <main className="min-h-screen bg-slate-950 px-4 py-6 text-white md:px-6">

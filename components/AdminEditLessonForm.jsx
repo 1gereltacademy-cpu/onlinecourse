@@ -30,7 +30,7 @@ export default function AdminEditLessonForm({ lesson }) {
         body: JSON.stringify({
           id: lesson.id,
           title: form.title,
-          video_url: form.video_url,
+          video_url: form.video_url.trim(),
           duration: form.duration,
           position: Number(form.position || 0),
           thumbnail_url: form.thumbnail_url,
@@ -71,6 +71,7 @@ export default function AdminEditLessonForm({ lesson }) {
 
       <input
         className="w-full rounded-2xl bg-white/10 p-3 text-white"
+        placeholder="Video URL"
         value={form.video_url}
         onChange={(e) => setForm({ ...form, video_url: e.target.value })}
       />

@@ -1,8 +1,13 @@
-
 "use client";
 
 import { useState } from "react";
+import { createClient } from "@supabase/supabase-js";
 import ImageUpload from "@/components/ImageUpload";
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
 
 export default function AdminCreateLessonForm({ courses }) {
   const [form, setForm] = useState({
@@ -25,29 +30,28 @@ export default function AdminCreateLessonForm({ courses }) {
 
     setUploadingVideo(true);
 
-    const formData = new FormData();
-    formData.append("file", videoFile);
-
-    const res = await fetch("/api/admin/upload-video", {
-      method: "POST",
-      body: formData,
-    });
-
-    const text = await res.text();
-    let data = {};
     try {
-      data = text ? JSON.parse(text) : {};
-    } catch {
-      data = { error: text || "Unknown server response" };
+      const safeName = `${Date.now()}-${videoFile.name.replace(/\s+/g, "-")}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("videos")
+        .upload(safeName, videoFile, {
+          cacheControl: "3600",
+          upsert: false,
+        });
+
+      if (uploadError) {
+        throw new Error(uploadError.message || "Видео upload алдаа");
+      }
+
+      const { data: publicUrlData } = supabase.storage
+        .from("videos")
+        .getPublicUrl(safeName);
+
+      return publicUrlData?.publicUrl || "";
+    } finally {
+      setUploadingVideo(false);
     }
-
-    setUploadingVideo(false);
-
-    if (!res.ok) {
-      throw new Error(data.error || "Видео upload алдаа");
-    }
-
-    return data.video_path || "";
   }
 
   async function handleSubmit(e) {
@@ -58,12 +62,11 @@ export default function AdminCreateLessonForm({ courses }) {
       setLoading(true);
 
       let finalVideoPath = form.video_path;
-      let finalVideoUrl = form.video_url;
+      let finalVideoUrl = form.video_url.trim();
 
-      // Хэрвээ private video upload сонгосон бол video_path хадгална
       if (videoFile) {
-        finalVideoPath = await uploadPrivateVideo();
-        finalVideoUrl = "";
+        finalVideoUrl = await uploadPrivateVideo();
+        finalVideoPath = "";
       }
 
       const res = await fetch("/api/admin/create-lesson", {
@@ -81,6 +84,7 @@ export default function AdminCreateLessonForm({ courses }) {
 
       const text = await res.text();
       let data = {};
+
       try {
         data = text ? JSON.parse(text) : {};
       } catch {
@@ -123,24 +127,22 @@ export default function AdminCreateLessonForm({ courses }) {
       />
 
       <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-        <p className="mb-2 text-sm text-slate-300">
-          Video source
-        </p>
+        <p className="mb-2 text-sm text-slate-300">Video source</p>
 
         <input
           className="w-full rounded-2xl bg-white/10 p-3 text-white"
-          placeholder="YouTube link (optional)"
+          placeholder="Video link (optional)"
           value={form.video_url}
           onChange={(e) => setForm({ ...form, video_url: e.target.value })}
         />
 
         <div className="mt-3 text-xs text-slate-400">
-          Эсвэл private video upload хийж болно
+          Эсвэл Supabase Storage руу шууд видео upload хийж болно
         </div>
 
         <input
           type="file"
-          accept="video/mp4,video/webm,video/ogg"
+          accept="video/mp4,video/webm,video/ogg,video/quicktime"
           onChange={(e) => setVideoFile(e.target.files?.[0] || null)}
           className="mt-3 w-full rounded-2xl bg-white/10 p-3 text-white file:mr-4 file:rounded-xl file:border-0 file:bg-white file:px-3 file:py-2 file:text-slate-900"
         />
@@ -152,7 +154,9 @@ export default function AdminCreateLessonForm({ courses }) {
         ) : null}
 
         {uploadingVideo ? (
-          <p className="mt-2 text-xs text-yellow-300">Видео upload хийж байна...</p>
+          <p className="mt-2 text-xs text-yellow-300">
+            Видео upload хийж байна...
+          </p>
         ) : null}
       </div>
 
