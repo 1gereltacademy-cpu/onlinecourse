@@ -7,14 +7,14 @@ import { cookies } from "next/headers";
 import { createClient } from "@supabase/supabase-js";
 
 async function getAdminSupabase() {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const accessToken = cookieStore.get("sb-access-token")?.value;
 
   if (!accessToken) redirect("/login");
 
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.NEXT_PUBLIC_SUPABASE_ROLE_KEY,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     {
       global: {
         headers: {
@@ -34,11 +34,65 @@ async function getAdminSupabase() {
     .from("profiles")
     .select("role, full_name")
     .eq("id", user.id)
-    .single();
+    .maybeSingle();
 
   if (profile?.role !== "admin") redirect("/");
 
   return { supabase, user, profile };
+}
+
+function chunkArray(items, size) {
+  const chunks = [];
+
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+
+  return chunks;
+}
+
+async function removeUserStorageObjects(adminSupabase, userId) {
+  const bucketsToClean = ["videos", "images", "thumbnails", "avatars", "course-files"];
+
+  for (const bucket of bucketsToClean) {
+    try {
+      const prefixes = [userId, `${userId}/`, `users/${userId}`, `users/${userId}/`];
+      const pathsToRemove = new Set();
+
+      for (const prefix of prefixes) {
+        const normalizedPrefix = prefix.endsWith("/") ? prefix.slice(0, -1) : prefix;
+
+        const { data: objects, error: listError } = await adminSupabase.storage
+          .from(bucket)
+          .list(normalizedPrefix, {
+            limit: 1000,
+            offset: 0,
+          });
+
+        if (listError) {
+          continue;
+        }
+
+        for (const object of objects || []) {
+          if (!object?.name) continue;
+          const basePath = normalizedPrefix ? `${normalizedPrefix}/${object.name}` : object.name;
+          pathsToRemove.add(basePath);
+        }
+      }
+
+      const removablePaths = Array.from(pathsToRemove);
+
+      for (const group of chunkArray(removablePaths, 100)) {
+        const { error: removeError } = await adminSupabase.storage.from(bucket).remove(group);
+
+        if (removeError) {
+          console.error(`storage remove error [${bucket}]:`, removeError.message);
+        }
+      }
+    } catch (error) {
+      console.error(`storage cleanup error [${bucket}]:`, error);
+    }
+  }
 }
 
 async function updateUserAccess(formData) {
@@ -57,10 +111,7 @@ async function updateUserAccess(formData) {
       : null,
   };
 
-  const { error } = await supabase
-    .from("profiles")
-    .update(payload)
-    .eq("id", userId);
+  const { error } = await supabase.from("profiles").update(payload).eq("id", userId);
 
   if (error) {
     console.error("update user access error:", error.message);
@@ -73,65 +124,51 @@ async function updateUserAccess(formData) {
 async function deleteUserCompletely(formData) {
   "use server";
 
-  const { supabase, user } = await getAdminSupabase();
+  const { user } = await getAdminSupabase();
 
-  const userId = String(formData.get("user_id") || "");
+  const userId = String(formData.get("user_id") || "").trim();
 
   if (!userId || userId === user.id) {
     console.error("delete blocked: invalid user or self delete");
     return;
   }
 
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-  // Auth user delete хийж чадахгүй бол profile-г дангаар нь устгахгүй.
-  // Тэгэхгүй бол login account үлдээд, profile л алга болчихдог.
-  if (!serviceRoleKey) {
-    console.error("SUPABASE_SERVICE_ROLE_KEY байхгүй байна. Auth user устгах боломжгүй.");
+  if (!supabaseUrl || !serviceRoleKey) {
+    console.error("NEXT_PUBLIC_SUPABASE_URL эсвэл SUPABASE_SERVICE_ROLE_KEY байхгүй байна.");
     return;
   }
 
   try {
-    const adminSupabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      serviceRoleKey
-    );
+    const adminSupabase = createClient(supabaseUrl, serviceRoleKey);
 
-    // 1) Эхлээд auth user устгана
-    const { error: authDeleteError } =
-      await adminSupabase.auth.admin.deleteUser(userId);
+    // 1) Storage cleanup
+    await removeUserStorageObjects(adminSupabase, userId);
+
+    // 2) User-тэй холбоотой app data цэвэрлэх
+    const tablesToDelete = [
+      { table: "payment_orders", column: "user_id" },
+      { table: "enrollments", column: "user_id" },
+      { table: "payment_requests", column: "user_id" },
+      { table: "profiles", column: "id" },
+    ];
+
+    for (const item of tablesToDelete) {
+      const { error } = await adminSupabase.from(item.table).delete().eq(item.column, userId);
+
+      if (error) {
+        console.error(`${item.table} delete error:`, error.message);
+      }
+    }
+
+    // 3) Хамгийн сүүлд auth user устгана
+    const { error: authDeleteError } = await adminSupabase.auth.admin.deleteUser(userId);
 
     if (authDeleteError) {
       console.error("auth delete error:", authDeleteError.message);
       return;
-    }
-
-    // 2) Дараа нь app table-уудыг цэвэрлэнэ
-    const { error: paymentError } = await supabase
-      .from("payment_orders")
-      .delete()
-      .eq("user_id", userId);
-
-    if (paymentError) {
-      console.error("payment delete error:", paymentError.message);
-    }
-
-    const { error: enrollmentError } = await supabase
-      .from("enrollments")
-      .delete()
-      .eq("user_id", userId);
-
-    if (enrollmentError) {
-      console.error("enrollment delete error:", enrollmentError.message);
-    }
-
-    const { error: profileDeleteError } = await supabase
-      .from("profiles")
-      .delete()
-      .eq("id", userId);
-
-    if (profileDeleteError) {
-      console.error("profile delete error:", profileDeleteError.message);
     }
   } catch (error) {
     console.error("delete user completely error:", error);
