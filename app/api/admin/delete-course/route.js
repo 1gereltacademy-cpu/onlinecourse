@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSupabaseServer } from "@/supabase-server";
+import { getSupabaseServer } from "@/lib/supabase-server";
 
 function extractStorageInfo(url) {
   if (!url || typeof url !== "string") return null;
