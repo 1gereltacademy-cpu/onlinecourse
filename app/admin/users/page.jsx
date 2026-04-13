@@ -82,28 +82,56 @@ async function deleteUserCompletely(formData) {
     return;
   }
 
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  // Auth user delete хийж чадахгүй бол profile-г дангаар нь устгахгүй.
+  // Тэгэхгүй бол login account үлдээд, profile л алга болчихдог.
+  if (!serviceRoleKey) {
+    console.error("SUPABASE_SERVICE_ROLE_KEY байхгүй байна. Auth user устгах боломжгүй.");
+    return;
+  }
+
   try {
-    await supabase.from("payment_orders").delete().eq("user_id", userId);
-    await supabase.from("enrollments").delete().eq("user_id", userId);
-    await supabase.from("profiles").delete().eq("id", userId);
-
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-    if (!serviceRoleKey) {
-      console.error("SUPABASE_SERVICE_ROLE_KEY байхгүй байна");
-      return;
-    }
-
     const adminSupabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL,
       serviceRoleKey
     );
 
+    // 1) Эхлээд auth user устгана
     const { error: authDeleteError } =
       await adminSupabase.auth.admin.deleteUser(userId);
 
     if (authDeleteError) {
       console.error("auth delete error:", authDeleteError.message);
+      return;
+    }
+
+    // 2) Дараа нь app table-уудыг цэвэрлэнэ
+    const { error: paymentError } = await supabase
+      .from("payment_orders")
+      .delete()
+      .eq("user_id", userId);
+
+    if (paymentError) {
+      console.error("payment delete error:", paymentError.message);
+    }
+
+    const { error: enrollmentError } = await supabase
+      .from("enrollments")
+      .delete()
+      .eq("user_id", userId);
+
+    if (enrollmentError) {
+      console.error("enrollment delete error:", enrollmentError.message);
+    }
+
+    const { error: profileDeleteError } = await supabase
+      .from("profiles")
+      .delete()
+      .eq("id", userId);
+
+    if (profileDeleteError) {
+      console.error("profile delete error:", profileDeleteError.message);
     }
   } catch (error) {
     console.error("delete user completely error:", error);
