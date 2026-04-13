@@ -421,4 +421,5 @@ function StatCard({ label, value, tone = "default" }) {
       <div className="mt-2 text-3xl font-bold text-white">{value}</div>
     </div>
   );
+  
 }
