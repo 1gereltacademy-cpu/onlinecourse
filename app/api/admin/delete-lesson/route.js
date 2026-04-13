@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 // 👇 ЭНЭ import замыг өөрийн төслийн helper-т тааруулж солиорой.
 // Жишээ нь:
 // import { getSupabaseServer } from "@/lib/supabase/server";
-import { getSupabaseServer } from "@/supabase-js";
+import { getSupabaseServer } from "@supabase/supabase-js";
 
 export async function POST(req) {
   try {
