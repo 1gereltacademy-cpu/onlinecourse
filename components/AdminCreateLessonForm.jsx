@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { createClient } from "@supabase/supabase-js";
-import ImageUpload from "@/components/ImageUpload";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -186,27 +185,6 @@ export default function AdminCreateLessonForm({ courses }) {
         value={form.position}
         onChange={(e) => setForm({ ...form, position: e.target.value })}
       />
-
-      <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-        <p className="mb-2 text-sm text-slate-300">Lesson зураг upload</p>
-
-        <ImageUpload
-          onUpload={(url) =>
-            setForm((prev) => ({
-              ...prev,
-              thumbnail_url: url,
-            }))
-          }
-        />
-
-        {form.thumbnail_url ? (
-          <img
-            src={form.thumbnail_url}
-            alt="Lesson preview"
-            className="mt-3 h-32 w-full rounded-xl object-cover"
-          />
-        ) : null}
-      </div>
 
       <label className="flex items-center gap-2 text-sm text-white">
         <input
