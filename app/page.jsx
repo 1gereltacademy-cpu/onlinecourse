@@ -183,6 +183,13 @@ export default function HomePage() {
                   >
                     Гарах
                   </button>
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="rounded-2xl border border-rose-400/30 bg-rose-400/10 px-5 py-3 text-center font-medium text-rose-300 transition hover:bg-rose-400/15 sm:px-6"
+                  >
+                    Гарах
+                  </button>
 
                   {role === "admin" && (
                     <Link
