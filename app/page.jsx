@@ -168,32 +168,33 @@ export default function HomePage() {
 
             <div className="mt-8 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:flex-wrap sm:items-center">
               {user ? (
-                <>
-                  <Link
-                    href="/profile"
-                    className="rounded-2xl border border-emerald-400/30 bg-emerald-400/10 px-5 py-3 text-center font-medium text-emerald-300 transition hover:bg-emerald-400/15 sm:px-6"
-                  >
-                    {displayName || "Профайл"}
-                  </Link>
+  <>
+    <Link
+      href="/profile"
+      className="rounded-2xl border border-emerald-400/30 bg-emerald-400/10 px-5 py-3 text-center font-medium text-emerald-300 transition hover:bg-emerald-400/15 sm:px-6"
+    >
+      {displayName || "Профайл"}
+    </Link>
 
-                  <button
-                    type="button"
-                    onClick={handleLogout}
-                    className="rounded-2xl border border-rose-400/30 bg-rose-400/10 px-5 py-3 text-center font-medium text-rose-300 transition hover:bg-rose-400/15 sm:px-6"
-                  >
-                    Гарах
-                  </button>
+    <button
+      type="button"
+      onClick={handleLogout}
+      className="rounded-2xl border border-rose-400/30 bg-rose-400/10 px-5 py-3 text-center font-medium text-rose-300 transition hover:bg-rose-400/15 sm:px-6"
+    >
+      Гарах
+    </button>
 
-                  {role === "admin" ? (
-                    <Link
-                      href="/admin"
-                      className="rounded-2xl border border-amber-400/30 bg-amber-400/10 px-5 py-3 text-center font-medium text-amber-300 transition hover:bg-amber-400/15 sm:px-6"
-                    >
-                      Admin
-                    </Link>
-                  ) : null}
-                </>
-              ) : (
+    {/* ✅ ADMIN BUTTON */}
+    {role === "admin" && (
+      <Link
+        href="/admin"
+        className="rounded-2xl border border-amber-400/30 bg-amber-400/10 px-5 py-3 text-center font-medium text-amber-300 transition hover:bg-amber-400/15 sm:px-6"
+      >
+        Admin
+      </Link>
+    )}
+  </>
+) : (
                 <>
                   <Link
                     href="/login"
