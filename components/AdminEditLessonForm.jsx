@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from "react";
@@ -5,15 +6,31 @@ import { useState } from "react";
 export default function AdminEditLessonForm({ lesson }) {
   const [form, setForm] = useState({
     title: lesson.title || "",
-    video_url: lesson.video_url || "",
     video_path: lesson.video_path || "",
-    duration: lesson.duration || "",
-    position: lesson.position || 0,
     thumbnail_url: lesson.thumbnail_url || "",
-    is_preview: lesson.is_preview || false,
   });
 
+  const [videoFile, setVideoFile] = useState(null);
+  const [imageFile, setImageFile] = useState(null);
   const [loading, setLoading] = useState(false);
+
+  async function uploadFile(file, bucket) {
+    const fileName = Date.now() + "-" + file.name;
+
+    const res = await fetch("/api/admin/upload", {
+      method: "POST",
+      body: JSON.stringify({ fileName, bucket }),
+    });
+
+    const { url } = await res.json();
+
+    await fetch(url, {
+      method: "PUT",
+      body: file,
+    });
+
+    return fileName;
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -21,6 +38,18 @@ export default function AdminEditLessonForm({ lesson }) {
 
     try {
       setLoading(true);
+
+      let videoPath = form.video_path;
+      let thumbnail = form.thumbnail_url;
+
+      if (videoFile) {
+        videoPath = await uploadFile(videoFile, "videos-private");
+      }
+
+      if (imageFile) {
+        const imageName = await uploadFile(imageFile, "thumbnails");
+        thumbnail = `thumbnails/${imageName}`;
+      }
 
       const res = await fetch("/api/admin/updateLesson", {
         method: "POST",
@@ -30,23 +59,12 @@ export default function AdminEditLessonForm({ lesson }) {
         body: JSON.stringify({
           id: lesson.id,
           title: form.title,
-          video_url: form.video_url.trim(),
-          video_path: form.video_path.trim(),
-          duration: form.duration,
-          position: Number(form.position || 0),
-          thumbnail_url: form.thumbnail_url,
-          is_preview: form.is_preview,
+          video_path: videoPath,
+          thumbnail_url: thumbnail,
         }),
       });
 
-      const text = await res.text();
-      let data = {};
-
-      try {
-        data = text ? JSON.parse(text) : {};
-      } catch {
-        data = { error: text || "Unknown server response" };
-      }
+      const data = await res.json();
 
       if (!res.ok) {
         alert(data.error || "Алдаа гарлаа");
@@ -55,76 +73,39 @@ export default function AdminEditLessonForm({ lesson }) {
 
       alert("Lesson шинэчлэгдлээ");
       location.reload();
-    } catch (error) {
-      alert(error.message || "Сервертэй холбогдоход алдаа гарлаа");
+    } catch (err) {
+      alert(err.message);
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mt-4 space-y-3">
+    <form onSubmit={handleSubmit} className="space-y-3">
+
       <input
-        className="w-full rounded-2xl bg-white/10 p-3 text-white"
-        placeholder="Lesson title"
+        className="w-full p-3 rounded bg-white/10 text-white"
         value={form.title}
-        onChange={(e) => setForm({ ...form, title: e.target.value })}
+        onChange={(e)=>setForm({...form,title:e.target.value})}
       />
 
-      <input
-        className="w-full rounded-2xl bg-white/10 p-3 text-white"
-        placeholder="Video URL"
-        value={form.video_url}
-        onChange={(e) => setForm({ ...form, video_url: e.target.value })}
-      />
+      <div>
+        <p className="text-sm text-white">Видео солих</p>
+        <input type="file" onChange={(e)=>setVideoFile(e.target.files[0])} />
+      </div>
 
-      <input
-        className="w-full rounded-2xl bg-white/10 p-3 text-white"
-        placeholder="Video path"
-        value={form.video_path}
-        onChange={(e) => setForm({ ...form, video_path: e.target.value })}
-      />
-
-      <input
-        className="w-full rounded-2xl bg-white/10 p-3 text-white"
-        placeholder="Duration"
-        value={form.duration}
-        onChange={(e) => setForm({ ...form, duration: e.target.value })}
-      />
-
-      <input
-        type="number"
-        className="w-full rounded-2xl bg-white/10 p-3 text-white"
-        placeholder="Position"
-        value={form.position}
-        onChange={(e) => setForm({ ...form, position: e.target.value })}
-      />
-
-      <input
-        className="w-full rounded-2xl bg-white/10 p-3 text-white"
-        placeholder="Thumbnail URL"
-        value={form.thumbnail_url}
-        onChange={(e) => setForm({ ...form, thumbnail_url: e.target.value })}
-      />
-
-      <label className="flex items-center gap-2 text-sm text-white">
-        <input
-          type="checkbox"
-          checked={form.is_preview}
-          onChange={(e) =>
-            setForm({ ...form, is_preview: e.target.checked })
-          }
-        />
-        Preview lesson
-      </label>
+      <div>
+        <p className="text-sm text-white">Зураг солих</p>
+        <input type="file" onChange={(e)=>setImageFile(e.target.files[0])} />
+      </div>
 
       <button
-        type="submit"
         disabled={loading}
-        className="rounded-2xl bg-yellow-400 px-4 py-2 text-slate-900 disabled:opacity-60"
+        className="bg-yellow-400 px-4 py-2 rounded"
       >
-        {loading ? "Хадгалж байна..." : "Lesson засах"}
+        {loading ? "Хадгалж байна..." : "Хадгалах"}
       </button>
+
     </form>
   );
 }
