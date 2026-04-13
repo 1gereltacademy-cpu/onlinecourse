@@ -165,7 +165,11 @@ export default function HomePage() {
             <p className="mx-auto mt-4 max-w-3xl text-sm leading-7 text-slate-300 sm:mt-6 sm:text-base md:text-lg">
               Шинэ ур чадвар эзэмшиж, мэдлэгээ дараагийн түвшинд хүргэ
             </p>
-
+<div className="mx-auto mt-4 max-w-xl rounded-2xl border border-red-500 bg-black/60 p-3 text-left text-sm text-white">
+  <div>DEBUG EMAIL: {user?.email || "user alga"}</div>
+  <div>DEBUG ROLE: {role || "role alga"}</div>
+  <div>DEBUG NAME: {displayName || "name alga"}</div>
+</div>
             <div className="mt-8 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:flex-wrap sm:items-center">
               {user ? (
                 <>
