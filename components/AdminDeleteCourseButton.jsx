@@ -27,7 +27,7 @@ export default function AdminDeleteCourseButton({ courseId, courseTitle }) {
         return;
       }
 
-      alert("Course болон холбоотой lesson-ууд устлаа");
+      alert(data.message || "Course, lesson, зураг, видео амжилттай устлаа");
       location.reload();
     } catch (error) {
       console.error("Delete course error:", error);
@@ -46,5 +46,4 @@ export default function AdminDeleteCourseButton({ courseId, courseTitle }) {
       {loading ? "Устгаж байна..." : "Course устгах"}
     </button>
   );
-  
 }

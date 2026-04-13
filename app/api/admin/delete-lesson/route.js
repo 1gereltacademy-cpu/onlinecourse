@@ -1,49 +1,126 @@
-"use client";
+import { NextResponse } from "next/server";
+import { getSupabaseServer } from "@/lib/supabase-server";
 
-import { useState } from "react";
+function parseStorageUrl(value) {
+  if (!value || typeof value !== "string") return null;
 
-export default function AdminDeleteLessonButton({ lessonId, lessonTitle }) {
-  const [loading, setLoading] = useState(false);
+  let clean = value.trim();
+  if (!clean) return null;
 
-  async function handleDelete() {
-    const ok = confirm(`"${lessonTitle}" lesson-ийг устгах уу?`);
-    if (!ok) return;
+  if (clean.includes("?")) {
+    clean = clean.split("?")[0];
+  }
 
-    try {
-      setLoading(true);
+  const markers = [
+    "/storage/v1/object/public/",
+    "/storage/v1/object/sign/",
+    "/storage/v1/object/authenticated/",
+    "/storage/v1/object/",
+  ];
 
-      const res = await fetch("/api/admin/delete-lesson", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ id: lessonId }),
-      });
+  for (const marker of markers) {
+    if (clean.includes(marker)) {
+      let rest = clean.split(marker)[1];
+      if (!rest) return null;
 
-      const data = await res.json();
+      if (rest.startsWith("public/")) rest = rest.replace("public/", "");
+      if (rest.startsWith("sign/")) rest = rest.replace("sign/", "");
+      if (rest.startsWith("authenticated/")) rest = rest.replace("authenticated/", "");
 
-      if (!res.ok) {
-        alert(data.error || "Lesson устгах үед алдаа гарлаа");
-        return;
-      }
+      const parts = rest.split("/");
+      const bucket = parts.shift();
+      const path = parts.join("/");
 
-      alert(data.message || "Lesson, зураг, видео амжилттай устлаа");
-      location.reload();
-    } catch (error) {
-      console.error("Delete lesson error:", error);
-      alert("Lesson устгах үед алдаа гарлаа");
-    } finally {
-      setLoading(false);
+      if (!bucket || !path) return null;
+      return { bucket, path };
     }
   }
 
-  return (
-    <button
-      onClick={handleDelete}
-      disabled={loading}
-      className="rounded-2xl bg-red-500 px-4 py-2 text-white hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-60"
-    >
-      {loading ? "Устгаж байна..." : "Lesson устгах"}
-    </button>
-  );
+  if (clean.includes("/")) {
+    const parts = clean.replace(/^\/+/, "").split("/");
+    const bucket = parts.shift();
+    const path = parts.join("/");
+    if (!bucket || !path) return null;
+    return { bucket, path };
+  }
+
+  return null;
+}
+
+async function deleteParsedFiles(supabase, entries) {
+  const grouped = {};
+
+  for (const entry of entries) {
+    if (!entry?.bucket || !entry?.path) continue;
+    if (!grouped[entry.bucket]) grouped[entry.bucket] = new Set();
+    grouped[entry.bucket].add(entry.path);
+  }
+
+  for (const [bucket, pathSet] of Object.entries(grouped)) {
+    const paths = Array.from(pathSet);
+    if (!paths.length) continue;
+
+    const { error } = await supabase.storage.from(bucket).remove(paths);
+    if (error) {
+      console.error(`Storage delete error in bucket "${bucket}":`, error.message);
+    }
+  }
+}
+
+export async function POST(req) {
+  try {
+    const { id } = await req.json();
+
+    if (!id) {
+      return NextResponse.json({ error: "Lesson id байхгүй" }, { status: 400 });
+    }
+
+    const supabase = getSupabaseServer();
+
+    const { data: lesson, error: findError } = await supabase
+      .from("lessons")
+      .select("id, thumbnail_url, video_path")
+      .eq("id", id)
+      .single();
+
+    if (findError || !lesson) {
+      return NextResponse.json({ error: "Lesson олдсонгүй" }, { status: 404 });
+    }
+
+    const filesToDelete = [];
+
+    const thumbInfo = parseStorageUrl(lesson.thumbnail_url);
+    if (thumbInfo) filesToDelete.push(thumbInfo);
+
+    if (lesson.video_path) {
+      filesToDelete.push({
+        bucket: "videos-private",
+        path: lesson.video_path,
+      });
+    }
+
+    const { error: deleteError } = await supabase
+      .from("lessons")
+      .delete()
+      .eq("id", id);
+
+    if (deleteError) {
+      return NextResponse.json(
+        { error: deleteError.message || "Lesson устгахад алдаа гарлаа" },
+        { status: 500 }
+      );
+    }
+
+    await deleteParsedFiles(supabase, filesToDelete);
+
+    return NextResponse.json({
+      success: true,
+      message: "Lesson, зураг, видео амжилттай устлаа",
+    });
+  } catch (e) {
+    return NextResponse.json(
+      { error: e.message || "Серверийн алдаа гарлаа" },
+      { status: 500 }
+    );
+  }
 }

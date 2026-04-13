@@ -27,7 +27,7 @@ export default function AdminDeleteLessonButton({ lessonId, lessonTitle }) {
         return;
       }
 
-      alert("Lesson устлаа");
+      alert(data.message || "Lesson, зураг, видео амжилттай устлаа");
       location.reload();
     } catch (error) {
       console.error("Delete lesson error:", error);
@@ -46,5 +46,4 @@ export default function AdminDeleteLessonButton({ lessonId, lessonTitle }) {
       {loading ? "Устгаж байна..." : "Lesson устгах"}
     </button>
   );
-  
 }
