@@ -46,4 +46,5 @@ export default function AdminDeleteLessonButton({ lessonId, lessonTitle }) {
       {loading ? "Устгаж байна..." : "Lesson устгах"}
     </button>
   );
+  
 }

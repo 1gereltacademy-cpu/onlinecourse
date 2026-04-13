@@ -46,4 +46,5 @@ export default function AdminDeleteCourseButton({ courseId, courseTitle }) {
       {loading ? "Устгаж байна..." : "Course устгах"}
     </button>
   );
+  
 }
