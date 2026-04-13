@@ -46,12 +46,12 @@ export default function HomePage() {
           : Promise.resolve({ data: null, error: null });
 
         const coursesPromise = supabase
-              .from("courses")
-              .select("id, title, description, price_mnt, thumbnail_url, position")
-              .eq("is_published", true)
-              .order("position", { ascending: true })
-              .order("created_at", { ascending: false })
-              .limit(HOME_COURSE_LIMIT);
+          .from("courses")
+          .select("id, title, description, price_mnt, thumbnail_url, position")
+          .eq("is_published", true)
+          .order("position", { ascending: true })
+          .order("created_at", { ascending: false })
+          .limit(HOME_COURSE_LIMIT);
 
         const [
           { data: profileData, error: profileError },
@@ -106,19 +106,13 @@ export default function HomePage() {
       subscription.unsubscribe();
     };
   }, []);
-  const profilePromise = authUser
-  ? supabase
-      .from("profiles")
-      .select("full_name, role")
-      .eq("id", authUser.id)
-      .maybeSingle()
-  : Promise.resolve({ data: null, error: null });
+
   const displayName =
-          profile?.full_name?.trim() ||
-          user?.user_metadata?.full_name?.trim() ||
-          user?.user_metadata?.name?.trim() ||
-          user?.email?.split("@")[0] ||
-  "Хэрэглэгч";
+    profile?.full_name?.trim() ||
+    user?.user_metadata?.full_name?.trim() ||
+    user?.user_metadata?.name?.trim() ||
+    user?.email?.split("@")[0] ||
+    "Хэрэглэгч";
 
   async function handleLogout() {
     try {
@@ -173,7 +167,6 @@ export default function HomePage() {
             </p>
 
             <div className="mt-8 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-
               {user ? (
                 <>
                   <Link
