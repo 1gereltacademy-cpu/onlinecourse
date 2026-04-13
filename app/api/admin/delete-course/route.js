@@ -1,34 +1,49 @@
-import { NextResponse } from "next/server";
-import { getSupabaseServer } from "@/lib/supabase-server";
+"use client";
 
-export async function POST(req) {
-  try {
-    const { id } = await req.json();
-    const supabase = getSupabaseServer();
+import { useState } from "react";
 
-    const { data: lessons } = await supabase
-      .from("lessons")
-      .select("id, thumbnail_url, video_path")
-      .eq("course_id", id);
+export default function AdminDeleteCourseButton({ courseId, courseTitle }) {
+  const [loading, setLoading] = useState(false);
 
-    const files = [];
+  async function handleDelete() {
+    const ok = confirm(`"${courseTitle}" course-ийг устгах уу?`);
+    if (!ok) return;
 
-    lessons?.forEach(l => {
-      if (l.thumbnail_url) files.push(l.thumbnail_url);
-      if (l.video_path) files.push(`videos-private/${l.video_path}`);
-    });
+    try {
+      setLoading(true);
 
-    await supabase.from("lessons").delete().eq("course_id", id);
-    await supabase.from("courses").delete().eq("id", id);
+      const res = await fetch("/api/admin/delete-course", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ id: courseId }),
+      });
 
-    if (files.length) {
-      await supabase.storage.from("videos-private").remove(
-        files.map(f => f.replace("videos-private/", ""))
-      );
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(data.error || "Course устгах үед алдаа гарлаа");
+        return;
+      }
+
+      alert(data.message || "Course, lesson, зураг, видео амжилттай устлаа");
+      location.reload();
+    } catch (error) {
+      console.error("Delete course error:", error);
+      alert("Course устгах үед алдаа гарлаа");
+    } finally {
+      setLoading(false);
     }
-
-    return NextResponse.json({ success: true });
-  } catch (e) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
   }
+
+  return (
+    <button
+      onClick={handleDelete}
+      disabled={loading}
+      className="rounded-2xl bg-red-500 px-4 py-2 text-white hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      {loading ? "Устгаж байна..." : "Course устгах"}
+    </button>
+  );
 }
