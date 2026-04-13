@@ -42,7 +42,7 @@ export default function HomePage() {
               .from("profiles")
               .select("full_name, role")
               .eq("id", authUser.id)
-              .single()
+              .maybeSingle()
           : Promise.resolve({ data: null, error: null });
 
         const coursesPromise = supabase
@@ -106,11 +106,19 @@ export default function HomePage() {
       subscription.unsubscribe();
     };
   }, []);
-
+  const profilePromise = authUser
+  ? supabase
+      .from("profiles")
+      .select("full_name, role")
+      .eq("id", authUser.id)
+      .maybeSingle()
+  : Promise.resolve({ data: null, error: null });
   const displayName =
-    profile?.full_name?.trim() ||
-    (profile === null ? "" : user?.email?.split("@")[0]) ||
-    "Хэрэглэгч";
+          profile?.full_name?.trim() ||
+          user?.user_metadata?.full_name?.trim() ||
+          user?.user_metadata?.name?.trim() ||
+          user?.email?.split("@")[0] ||
+  "Хэрэглэгч";
 
   async function handleLogout() {
     try {
