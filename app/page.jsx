@@ -171,28 +171,27 @@ export default function HomePage() {
                 <>
                   <Link
                     href="/profile"
-                    className="rounded-2xl border border-emerald-400/30 bg-emerald-400/10 px-5 py-3 text-center font-medium text-emerald-300 transition hover:bg-emerald-400/15 sm:px-6"
+                    className="rounded-2xl border border-emerald-400/30 bg-emerald-400/10 px-6 py-3 font-medium text-emerald-300 transition hover:bg-emerald-400/15"
                   >
-                    {displayName || "Профайл"}
+                    {displayName}
                   </Link>
 
                   <button
                     type="button"
                     onClick={handleLogout}
-                    className="rounded-2xl border border-rose-400/30 bg-rose-400/10 px-5 py-3 text-center font-medium text-rose-300 transition hover:bg-rose-400/15 sm:px-6"
+                    className="rounded-2xl border border-rose-400/30 bg-rose-400/10 px-6 py-3 font-medium text-rose-300 transition hover:bg-rose-400/15"
                   >
                     Гарах
                   </button>
-                  
 
-                  {role === "admin" && (
+                  {role === "admin" ? (
                     <Link
                       href="/admin"
-                      className="rounded-2xl border border-amber-400/30 bg-amber-400/10 px-5 py-3 text-center font-medium text-amber-300 transition hover:bg-amber-400/15 sm:px-6"
+                      className="rounded-2xl border border-amber-400/30 bg-amber-400/10 px-6 py-3 font-medium text-amber-300 transition hover:bg-amber-400/15"
                     >
                       Admin
                     </Link>
-                  )}
+                  ) : null}
                 </>
               ) : (
                 <>
