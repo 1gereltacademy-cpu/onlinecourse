@@ -7,7 +7,7 @@ import { cookies } from "next/headers";
 import { createClient } from "@supabase/supabase-js";
 
 async function getAdminSupabase() {
-  const cookieStore = await cookies();
+  const cookieStore = cookies();
   const accessToken = cookieStore.get("sb-access-token")?.value;
 
   if (!accessToken) redirect("/login");
@@ -30,69 +30,19 @@ async function getAdminSupabase() {
 
   if (!user) redirect("/login");
 
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("role, full_name")
+    .select("role, name")
     .eq("id", user.id)
     .maybeSingle();
 
-  if (profile?.role !== "admin") redirect("/");
+  if (profileError) {
+    console.error("profile fetch error:", profileError.message);
+  }
+
+  if (!profile || profile.role !== "admin") redirect("/");
 
   return { supabase, user, profile };
-}
-
-function chunkArray(items, size) {
-  const chunks = [];
-
-  for (let i = 0; i < items.length; i += size) {
-    chunks.push(items.slice(i, i + size));
-  }
-
-  return chunks;
-}
-
-async function removeUserStorageObjects(adminSupabase, userId) {
-  const bucketsToClean = ["videos", "images", "thumbnails", "avatars", "course-files"];
-
-  for (const bucket of bucketsToClean) {
-    try {
-      const prefixes = [userId, `${userId}/`, `users/${userId}`, `users/${userId}/`];
-      const pathsToRemove = new Set();
-
-      for (const prefix of prefixes) {
-        const normalizedPrefix = prefix.endsWith("/") ? prefix.slice(0, -1) : prefix;
-
-        const { data: objects, error: listError } = await adminSupabase.storage
-          .from(bucket)
-          .list(normalizedPrefix, {
-            limit: 1000,
-            offset: 0,
-          });
-
-        if (listError) {
-          continue;
-        }
-
-        for (const object of objects || []) {
-          if (!object?.name) continue;
-          const basePath = normalizedPrefix ? `${normalizedPrefix}/${object.name}` : object.name;
-          pathsToRemove.add(basePath);
-        }
-      }
-
-      const removablePaths = Array.from(pathsToRemove);
-
-      for (const group of chunkArray(removablePaths, 100)) {
-        const { error: removeError } = await adminSupabase.storage.from(bucket).remove(group);
-
-        if (removeError) {
-          console.error(`storage remove error [${bucket}]:`, removeError.message);
-        }
-      }
-    } catch (error) {
-      console.error(`storage cleanup error [${bucket}]:`, error);
-    }
-  }
 }
 
 async function updateUserAccess(formData) {
@@ -111,7 +61,10 @@ async function updateUserAccess(formData) {
       : null,
   };
 
-  const { error } = await supabase.from("profiles").update(payload).eq("id", userId);
+  const { error } = await supabase
+    .from("profiles")
+    .update(payload)
+    .eq("id", userId);
 
   if (error) {
     console.error("update user access error:", error.message);
@@ -125,50 +78,35 @@ async function deleteUserCompletely(formData) {
   "use server";
 
   const { user } = await getAdminSupabase();
-
-  const userId = String(formData.get("user_id") || "").trim();
+  const userId = String(formData.get("user_id") || "");
 
   if (!userId || userId === user.id) {
     console.error("delete blocked: invalid user or self delete");
     return;
   }
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-  if (!supabaseUrl || !serviceRoleKey) {
-    console.error("NEXT_PUBLIC_SUPABASE_URL эсвэл SUPABASE_SERVICE_ROLE_KEY байхгүй байна.");
+  if (!serviceRoleKey) {
+    console.error("SUPABASE_SERVICE_ROLE_KEY байхгүй байна");
     return;
   }
 
   try {
-    const adminSupabase = createClient(supabaseUrl, serviceRoleKey);
+    const adminSupabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      serviceRoleKey
+    );
 
-    // 1) Storage cleanup
-    await removeUserStorageObjects(adminSupabase, userId);
+    await adminSupabase.from("payment_orders").delete().eq("user_id", userId);
+    await adminSupabase.from("enrollments").delete().eq("user_id", userId);
+    await adminSupabase.from("profiles").delete().eq("id", userId);
 
-    // 2) User-тэй холбоотой app data цэвэрлэх
-    const tablesToDelete = [
-      { table: "payment_orders", column: "user_id" },
-      { table: "enrollments", column: "user_id" },
-      { table: "payment_requests", column: "user_id" },
-      { table: "profiles", column: "id" },
-    ];
-
-    for (const item of tablesToDelete) {
-      const { error } = await adminSupabase.from(item.table).delete().eq(item.column, userId);
-
-      if (error) {
-        console.error(`${item.table} delete error:`, error.message);
-      }
-    }
-
-    // 3) Хамгийн сүүлд auth user устгана
-    const { error: authDeleteError } = await adminSupabase.auth.admin.deleteUser(userId);
+    const { error: authDeleteError } =
+      await adminSupabase.auth.admin.deleteUser(userId);
 
     if (authDeleteError) {
       console.error("auth delete error:", authDeleteError.message);
-      return;
     }
   } catch (error) {
     console.error("delete user completely error:", error);
@@ -183,8 +121,8 @@ export default async function AdminUsersPage() {
 
   const { data: users } = await supabase
     .from("profiles")
-    .select("id, full_name, email, phone, register_number, role, access_expires_at")
-    .order("full_name", { ascending: true });
+    .select("id, name, email, phone, register_number, role, access_expires_at")
+    .order("name", { ascending: true });
 
   const totalUsers = users?.length || 0;
   const activeUsers =
@@ -204,19 +142,19 @@ export default async function AdminUsersPage() {
       <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,rgba(99,102,241,0.22),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(16,185,129,0.14),transparent_24%),linear-gradient(to_bottom,#020617,#0f172a,#020617)]" />
 
       <section className="border-b border-white/10">
-        <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
-          <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+        <div className="mx-auto max-w-7xl px-6 py-8">
+          <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <div className="inline-flex items-center rounded-full border border-amber-400/20 bg-amber-400/10 px-4 py-2 text-sm text-amber-300">
                 User management
               </div>
 
-              <h1 className="mt-5 text-3xl font-bold tracking-tight sm:text-4xl md:text-5xl">
+              <h1 className="mt-5 text-4xl font-bold tracking-tight md:text-5xl">
                 Хэрэглэгчдийн
                 <span className="block text-indigo-400">удирдлага</span>
               </h1>
 
-              <p className="mt-3 max-w-2xl text-sm text-slate-300 sm:text-base">
+              <p className="mt-3 max-w-2xl text-slate-300">
                 Хэрэглэгчдийн эрх, admin/user role, эрхийн дуусах хугацаа,
                 мөн бүрэн устгах үйлдлийг эндээс удирдана.
               </p>
@@ -233,15 +171,26 @@ export default async function AdminUsersPage() {
           </div>
 
           <div className="mt-10 grid gap-4 sm:grid-cols-3">
-            <StatCard label="Нийт хэрэглэгч" value={totalUsers} />
-            <StatCard label="Active" value={activeUsers} tone="green" />
-            <StatCard label="Expired" value={expiredUsers} tone="rose" />
+            <div className="rounded-[28px] border border-white/10 bg-white/[0.05] p-5 backdrop-blur">
+              <div className="text-sm text-slate-400">Нийт хэрэглэгч</div>
+              <div className="mt-2 text-3xl font-bold text-white">{totalUsers}</div>
+            </div>
+
+            <div className="rounded-[28px] border border-emerald-400/20 bg-emerald-400/10 p-5 backdrop-blur">
+              <div className="text-sm text-emerald-200">Active</div>
+              <div className="mt-2 text-3xl font-bold text-white">{activeUsers}</div>
+            </div>
+
+            <div className="rounded-[28px] border border-rose-400/20 bg-rose-400/10 p-5 backdrop-blur">
+              <div className="text-sm text-rose-200">Expired</div>
+              <div className="mt-2 text-3xl font-bold text-white">{expiredUsers}</div>
+            </div>
           </div>
         </div>
       </section>
 
-      <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
-        <div className="rounded-[28px] border border-white/10 bg-white/[0.05] p-4 shadow-xl backdrop-blur sm:rounded-[32px] sm:p-6">
+      <section className="mx-auto max-w-7xl px-6 py-8">
+        <div className="rounded-[32px] border border-white/10 bg-white/[0.05] p-6 shadow-xl backdrop-blur">
           <div className="space-y-4">
             {users?.length ? (
               users.map((item, index) => {
@@ -252,15 +201,15 @@ export default async function AdminUsersPage() {
                 return (
                   <div
                     key={item.id}
-                    className="rounded-3xl border border-white/10 bg-slate-900/60 p-4 sm:p-5"
+                    className="rounded-3xl border border-white/10 bg-slate-900/60 p-5"
                   >
                     <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-                      <div className="min-w-0">
+                      <div>
                         <div className="text-xs uppercase tracking-wide text-slate-400">
                           User {index + 1}
                         </div>
-                        <div className="mt-1 break-words text-lg font-semibold text-white">
-                          {item.full_name || "Нэр оруулаагүй"}
+                        <div className="mt-1 text-lg font-semibold text-white">
+                          {item.name || "Нэр оруулаагүй"}
                         </div>
 
                         <div className="mt-2 flex flex-wrap gap-2 text-xs">
@@ -324,15 +273,15 @@ export default async function AdminUsersPage() {
                       </div>
                     </div>
 
-                    <div className="grid gap-4">
+                    <div className="grid gap-4 xl:grid-cols-[1fr_auto]">
                       <form
                         action={updateUserAccess}
-                        className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_220px_220px_150px]"
+                        className="grid gap-4 xl:grid-cols-[1fr_220px_220px_150px]"
                       >
                         <input type="hidden" name="user_id" value={item.id} />
 
                         <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
-                          {item.full_name || "Нэргүй хэрэглэгч"}
+                          {item.name || "Нэргүй хэрэглэгч"}
                         </div>
 
                         <select
@@ -398,28 +347,4 @@ export default async function AdminUsersPage() {
       </section>
     </main>
   );
-}
-
-function StatCard({ label, value, tone = "default" }) {
-  const toneClasses =
-    tone === "green"
-      ? "border-emerald-400/20 bg-emerald-400/10"
-      : tone === "rose"
-      ? "border-rose-400/20 bg-rose-400/10"
-      : "border-white/10 bg-white/[0.05]";
-
-  const textClasses =
-    tone === "green"
-      ? "text-emerald-200"
-      : tone === "rose"
-      ? "text-rose-200"
-      : "text-slate-400";
-
-  return (
-    <div className={`rounded-[28px] border p-5 backdrop-blur ${toneClasses}`}>
-      <div className={`text-sm ${textClasses}`}>{label}</div>
-      <div className="mt-2 text-3xl font-bold text-white">{value}</div>
-    </div>
-  );
-  
 }

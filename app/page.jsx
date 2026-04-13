@@ -40,7 +40,7 @@ export default function HomePage() {
         const profilePromise = authUser
           ? supabase
               .from("profiles")
-              .select("full_name, role")
+              .select("name, role")
               .eq("id", authUser.id)
               .maybeSingle()
           : Promise.resolve({ data: null, error: null });
@@ -108,9 +108,9 @@ export default function HomePage() {
   }, []);
 
   const displayName =
-    profile?.full_name?.trim() ||
-    user?.user_metadata?.full_name?.trim() ||
+    profile?.name?.trim() ||
     user?.user_metadata?.name?.trim() ||
+    user?.user_metadata?.full_name?.trim() ||
     user?.email?.split("@")[0] ||
     "Хэрэглэгч";
 
@@ -165,12 +165,10 @@ export default function HomePage() {
             <p className="mx-auto mt-4 max-w-3xl text-sm leading-7 text-slate-300 sm:mt-6 sm:text-base md:text-lg">
               Шинэ ур чадвар эзэмшиж, мэдлэгээ дараагийн түвшинд хүргэ
             </p>
-<div>EMAIL: {user?.email}</div>
-                <div>ROLE: {role}</div>
+
             <div className="mt-8 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:flex-wrap sm:items-center">
               {user ? (
                 <>
-                
                   <Link
                     href="/profile"
                     className="rounded-2xl border border-emerald-400/30 bg-emerald-400/10 px-6 py-3 font-medium text-emerald-300 transition hover:bg-emerald-400/15"
@@ -337,6 +335,5 @@ export default function HomePage() {
         </Link>
       </section>
     </main>
-
   );
 }
