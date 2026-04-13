@@ -335,5 +335,6 @@ export default function HomePage() {
         </Link>
       </section>
     </main>
+    
   );
 }
