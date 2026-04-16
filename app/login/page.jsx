@@ -53,39 +53,6 @@ export default function LoginPage() {
       setLoading(false);
     }
   }
-
-  async function handleForgotPassword() {
-    const email = form.email.trim();
-
-    if (!email) {
-      setResetMessage("Нууц үг сэргээхдээ эхлээд и-мэйл хаягаа оруулна уу.");
-      return;
-    }
-
-    try {
-      setResetLoading(true);
-      setResetMessage("");
-
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
-      });
-
-      if (error) {
-        console.error("reset password error:", error);
-        setResetMessage(error.message);
-        return;
-      }
-
-      setResetMessage(
-        "Нууц үг сэргээх холбоос таны и-мэйл рүү илгээгдлээ. И-мэйлээ шалгана уу."
-      );
-    } catch (err) {
-      setResetMessage(err.message || "Нууц үг сэргээх үед алдаа гарлаа.");
-    } finally {
-      setResetLoading(false);
-    }
-  }
-
   return (
     <main className="relative min-h-screen overflow-hidden bg-slate-950 text-white">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(99,102,241,0.25),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(16,185,129,0.18),transparent_30%),linear-gradient(to_bottom,#020617,#0f172a,#020617)]" />
