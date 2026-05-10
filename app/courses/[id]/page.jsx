@@ -344,7 +344,7 @@ export default async function CourseDetailPage({ params, searchParams }) {
               </div>
 
               <div className="mt-4">
-                <h3 className="text-xl font-semibold">Сургалтын төлбөр төлсөний дараа хүсэлт илгээгээрэй</h3>
+                <h3 className="text-xl font-semibold">Сургалтын төлбөр</h3>
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   {hasDiscount ? (
                     <>
