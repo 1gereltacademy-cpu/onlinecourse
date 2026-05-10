@@ -113,7 +113,7 @@ export default function ContactPage() {
                   <div>
                     <div className="text-sm text-sky-200">Facebook page</div>
                     <div className="mt-2 text-xl font-semibold text-white">
-                      Shine studio
+                      Gerelt studio
                     </div>
                     <p className="mt-2 text-sm leading-6 text-slate-200">
                       Манай page-ээр дамжуулж бидэнтэй шууд холбогдоорой.
@@ -135,7 +135,7 @@ export default function ContactPage() {
                   <div>
                     <div className="text-sm text-pink-200">Instagram</div>
                     <div className="mt-2 text-xl font-semibold text-white">
-                      1shineacademy
+                      gereltacademy1
                     </div>
                     <p className="mt-2 text-sm leading-6 text-slate-200">
                       Сургалт, бүтээл болон шинэ постуудаа эндээс үзээрэй.
