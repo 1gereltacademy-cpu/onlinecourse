@@ -2013,12 +2013,16 @@ body {
     grid-template-columns: 1.3fr 0.7fr;
   }
 
-  .xl\:grid-cols-\[380px_1fr\] {
-    grid-template-columns: 380px 1fr;
+  .xl\:grid-cols-\[1fr_220px_220px_150px\] {
+    grid-template-columns: 1fr 220px 220px 150px;
   }
 
-  .xl\:grid-cols-\[minmax\(0\2c 1fr\)_220px_220px_150px\] {
-    grid-template-columns: minmax(0,1fr) 220px 220px 150px;
+  .xl\:grid-cols-\[1fr_auto\] {
+    grid-template-columns: 1fr auto;
+  }
+
+  .xl\:grid-cols-\[380px_1fr\] {
+    grid-template-columns: 380px 1fr;
   }
 
   .xl\:flex-row {
