@@ -348,6 +348,7 @@ export default async function CourseDetailPage({ params, searchParams }) {
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   {hasDiscount ? (
                     <>
+                    
                       <div className="text-3xl font-bold text-white">
                         {formatPrice(course.discount_price_mnt)}
                       </div>
