@@ -134,7 +134,7 @@ export async function POST(req) {
            email: email,
            phone,
            register_number,
-            role: "user",
+            role: "student",
         });
 
     if (profileError) {
