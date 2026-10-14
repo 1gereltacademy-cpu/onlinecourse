@@ -10,7 +10,7 @@ export async function POST(req) {
   const fileName = Date.now() + "-" + file.name;
 
   const { data, error } = await supabase.storage
-    .from("images")
+    .from("course-images")
     .upload(fileName, file);
 
   if (error) {
