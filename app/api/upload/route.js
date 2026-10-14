@@ -18,7 +18,7 @@ export async function POST(req) {
   }
 
   const { data: publicUrl } = supabase.storage
-    .from("images")
+    .from("course-images")
     .getPublicUrl(fileName);
 
   return NextResponse.json({ url: publicUrl.publicUrl });
