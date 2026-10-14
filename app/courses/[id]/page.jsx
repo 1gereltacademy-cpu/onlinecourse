@@ -40,7 +40,7 @@ export default async function CourseDetailPage({ params, searchParams }) {
 
   let currentUserId = null;
   let currentUserEmail = null;
-  let currentUserRole = "user";
+  let currentUserRole = "user"; 
 
   const cookieStore = cookies();
   const accessToken = cookieStore.get("sb-access-token")?.value;
