@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useMemo, useState } from "react";
@@ -17,7 +18,7 @@ function AnimatedBlock({ open, children }) {
         open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
       }`}
     >
-      <div className="overflow-hidden">{children}</div>
+      <div className="min-h-0 overflow-hidden">{children}</div>
     </div>
   );
 }
@@ -37,8 +38,7 @@ function TopCollapseCard({ title, desc, open, onToggle, children }) {
           <h2 className="mt-4 text-2xl font-semibold">{title}</h2>
           <p className="mt-2 text-slate-400">{desc}</p>
         </div>
-
-        <span className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white">
+        <span className="shrink-0 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white">
           {open ? "Хураах ▲" : "Нээх ▼"}
         </span>
       </button>
@@ -50,7 +50,10 @@ function TopCollapseCard({ title, desc, open, onToggle, children }) {
   );
 }
 
-export default function AdminDashboardCollapsible({ courses, lessons }) {
+export default function AdminDashboardCollapsible({
+  courses = [],
+  lessons = [],
+}) {
   const [createCourseOpen, setCreateCourseOpen] = useState(false);
   const [createLessonOpen, setCreateLessonOpen] = useState(false);
   const [coursesOpen, setCoursesOpen] = useState(true);
@@ -60,22 +63,23 @@ export default function AdminDashboardCollapsible({ courses, lessons }) {
   const [dragSaving, setDragSaving] = useState(false);
   const [dragMessage, setDragMessage] = useState("");
 
-  const [orderedCourses, setOrderedCourses] = useState(() =>
-    [...(courses || [])].sort((a, b) => {
-      const aPos =
-        typeof a.position === "number" ? a.position : Number.MAX_SAFE_INTEGER;
-      const bPos =
-        typeof b.position === "number" ? b.position : Number.MAX_SAFE_INTEGER;
-
-      if (aPos !== bPos) return aPos - bPos;
-      return 0;
-    })
-  );
+  const orderedCourses = useMemo(() => {
+    return [...courses].sort((a, b) => {
+      const aPos = Number(a.position ?? Number.MAX_SAFE_INTEGER);
+      const bPos = Number(b.position ?? Number.MAX_SAFE_INTEGER);
+      return aPos - bPos;
+    });
+  }, [courses]);
 
   const grouped = useMemo(() => {
     return orderedCourses.map((course) => ({
       ...course,
-      lessons: (lessons || []).filter((lesson) => lesson.course_id === course.id),
+      lessons: lessons
+        .filter(
+          (lesson) =>
+            String(lesson.course_id) === String(course.id)
+        )
+        .sort((a, b) => Number(a.position ?? 0) - Number(b.position ?? 0)),
     }));
   }, [orderedCourses, lessons]);
 
@@ -114,20 +118,19 @@ export default function AdminDashboardCollapsible({ courses, lessons }) {
       const supabase = getSupabaseBrowser();
 
       for (let i = 0; i < nextCourses.length; i += 1) {
-        const course = nextCourses[i];
         const { error } = await supabase
           .from("courses")
           .update({ position: i + 1 })
-          .eq("id", course.id);
+          .eq("id", nextCourses[i].id);
 
         if (error) throw error;
       }
 
       setDragMessage("Course дараалал хадгалагдлаа.");
     } catch (error) {
-      console.error("save course order error:", error);
+      console.error("Save course order error:", error);
       setDragMessage(
-        "Хадгалах үед алдаа гарлаа. courses table дээр position column байгаа эсэхийг шалга."
+        `Дараалал хадгалахад алдаа гарлаа: ${error.message || "Тодорхойгүй алдаа"}`
       );
     } finally {
       setDragSaving(false);
@@ -147,7 +150,6 @@ export default function AdminDashboardCollapsible({ courses, lessons }) {
       })
     );
 
-    setOrderedCourses(nextCourses);
     setDragIndex(null);
     saveCourseOrder(nextCourses);
   }
@@ -170,7 +172,7 @@ export default function AdminDashboardCollapsible({ courses, lessons }) {
           open={createLessonOpen}
           onToggle={() => setCreateLessonOpen((prev) => !prev)}
         >
-          <AdminCreateLessonForm courses={orderedCourses || []} />
+          <AdminCreateLessonForm courses={orderedCourses} />
         </TopCollapseCard>
       </div>
 
@@ -184,15 +186,15 @@ export default function AdminDashboardCollapsible({ courses, lessons }) {
             <div>
               <h2 className="text-2xl font-semibold">Courses & Lessons</h2>
               <p className="mt-1 text-slate-400">
-                Нэг course-ийг дарахад доторх lesson-үүд нь хураалттай харагдана.
+                Бүх course болон lesson-ийг удирдах хэсэг.
               </p>
             </div>
 
             <div className="flex items-center gap-3">
               <span className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-300">
-                {orderedCourses?.length || 0}
+                {orderedCourses.length} course · {lessons.length} lesson
               </span>
-              <span className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white">
+              <span className="shrink-0 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white">
                 {coursesOpen ? "Хураах ▲" : "Нээх ▼"}
               </span>
             </div>
@@ -202,7 +204,7 @@ export default function AdminDashboardCollapsible({ courses, lessons }) {
             <div className="mt-5">
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <div className="text-sm text-slate-400">
-                  Course card-ийг mouse-аар чирж дарааллыг нь солино.
+                  Course card-ийг mouse-аар чирж дарааллыг солино.
                 </div>
                 <div className="text-sm text-slate-300">
                   {dragSaving ? "Хадгалж байна..." : dragMessage}
@@ -210,16 +212,17 @@ export default function AdminDashboardCollapsible({ courses, lessons }) {
               </div>
 
               <div className="space-y-4">
-                {grouped.length ? (
+                {grouped.length > 0 ? (
                   grouped.map((course, index) => {
                     const courseOpen = !!courseState[course.id]?.open;
 
                     return (
                       <div
                         key={course.id}
-                        draggable
+                        draggable={!dragSaving}
                         onDragStart={() => setDragIndex(index)}
                         onDragOver={(e) => e.preventDefault()}
+                        onDragEnd={() => setDragIndex(null)}
                         onDrop={() => handleDropCourse(index)}
                         className={`rounded-3xl border bg-slate-900/60 p-5 transition ${
                           dragIndex === index
@@ -232,23 +235,23 @@ export default function AdminDashboardCollapsible({ courses, lessons }) {
                           onClick={() => toggleCourse(course.id)}
                           className="flex w-full items-start justify-between gap-3 text-left"
                         >
-                          <div>
-                            <div className="text-lg font-semibold text-white">
-                              {course.title}
+                          <div className="min-w-0">
+                            <div className="break-words text-lg font-semibold text-white">
+                              {course.title || "Нэргүй course"}
                             </div>
 
                             <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                              {course.category ? (
+                              {course.category && (
                                 <span className="rounded-full bg-indigo-500/20 px-3 py-1 text-indigo-200">
                                   {course.category}
                                 </span>
-                              ) : null}
+                              )}
 
-                              {course.level ? (
+                              {course.level && (
                                 <span className="rounded-full bg-white/10 px-3 py-1 text-slate-200">
                                   {course.level}
                                 </span>
-                              ) : null}
+                              )}
 
                               <span className="rounded-full bg-emerald-500/20 px-3 py-1 text-emerald-200">
                                 {Number(course.price_mnt || 0).toLocaleString()}₮
@@ -258,20 +261,25 @@ export default function AdminDashboardCollapsible({ courses, lessons }) {
                                 {course.lessons.length} lesson
                               </span>
 
-                              <span className="rounded-full bg-white/10 px-3 py-1 text-slate-200">
-                                Чирж зөөнө
+                              <span
+                                className={`rounded-full px-3 py-1 ${
+                                  course.is_premium
+                                    ? "bg-amber-500/20 text-amber-200"
+                                    : "bg-white/10 text-slate-200"
+                                }`}
+                              >
+                                {course.is_premium ? "Premium" : "Free"}
                               </span>
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-3">
-                            <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">
+                          <div className="flex shrink-0 flex-col items-end gap-2">
+                            <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">
                               {course.is_published ? "Published" : "Draft"}
-                            </div>
-
-                            <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">
+                            </span>
+                            <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white">
                               {courseOpen ? "▲" : "▼"}
-                            </div>
+                            </span>
                           </div>
                         </button>
 
@@ -287,14 +295,18 @@ export default function AdminDashboardCollapsible({ courses, lessons }) {
                               </div>
 
                               <div className="mt-3">
-                                <AdminDeleteCourseButton courseId={course.id} />
+                                <AdminDeleteCourseButton
+                                  courseId={course.id}
+                                  courseTitle={course.title}
+                                />
                               </div>
                             </div>
 
                             <div className="mt-4 space-y-3">
-                              {course.lessons.length ? (
-                                course.lessons.map((lesson, index) => {
-                                  const lessonOpen = !!lessonState[course.id]?.[lesson.id];
+                              {course.lessons.length > 0 ? (
+                                course.lessons.map((lesson, lessonIndex) => {
+                                  const lessonOpen =
+                                    !!lessonState[course.id]?.[lesson.id];
 
                                   return (
                                     <div
@@ -303,19 +315,21 @@ export default function AdminDashboardCollapsible({ courses, lessons }) {
                                     >
                                       <button
                                         type="button"
-                                        onClick={() => toggleLesson(course.id, lesson.id)}
+                                        onClick={() =>
+                                          toggleLesson(course.id, lesson.id)
+                                        }
                                         className="flex w-full items-start justify-between gap-3 text-left"
                                       >
-                                        <div>
+                                        <div className="min-w-0">
                                           <div className="text-xs uppercase tracking-wide text-slate-400">
-                                            Lesson {index + 1}
+                                            Lesson {lessonIndex + 1}
                                           </div>
-                                          <div className="mt-1 text-base font-semibold text-white">
-                                            {lesson.title}
+                                          <div className="mt-1 break-words text-base font-semibold text-white">
+                                            {lesson.title || "Нэргүй lesson"}
                                           </div>
                                         </div>
 
-                                        <div className="flex flex-wrap gap-2 text-xs">
+                                        <div className="flex shrink-0 flex-wrap justify-end gap-2 text-xs">
                                           <span className="rounded-full bg-white/10 px-3 py-1 text-slate-200">
                                             {lesson.duration || "--:--"}
                                           </span>
@@ -327,7 +341,9 @@ export default function AdminDashboardCollapsible({ courses, lessons }) {
                                                 : "bg-amber-500/20 text-amber-200"
                                             }`}
                                           >
-                                            {lesson.is_preview ? "Preview" : "Premium"}
+                                            {lesson.is_preview
+                                              ? "Preview"
+                                              : "Premium"}
                                           </span>
 
                                           <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-slate-300">
@@ -345,7 +361,9 @@ export default function AdminDashboardCollapsible({ courses, lessons }) {
                                           </div>
 
                                           <div className="mt-3">
-                                            <AdminDeleteLessonButton lessonId={lesson.id} />
+                                            <AdminDeleteLessonButton
+                                              lessonId={lesson.id}
+                                            />
                                           </div>
                                         </div>
                                       </AnimatedBlock>
@@ -365,7 +383,7 @@ export default function AdminDashboardCollapsible({ courses, lessons }) {
                   })
                 ) : (
                   <div className="rounded-3xl border border-dashed border-white/10 p-5 text-slate-400">
-                    Course алга байна.
+                    Course олдсонгүй. Supabase-ийн courses query болон RLS тохиргоог шалгана уу.
                   </div>
                 )}
               </div>

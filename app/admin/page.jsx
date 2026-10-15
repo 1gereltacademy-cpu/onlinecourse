@@ -42,11 +42,14 @@ async function getAdminSupabase() {
 export default async function AdminPage() {
   const { supabase, user, profile } = await getAdminSupabase();
 
-  const { data: courses } = await supabase
-    .from("courses")
-    .select("*")
-    .order("position", { ascending: true })
-    .order("created_at", { ascending: false });
+  const { data: courses, error: coursesError } = await supabase
+  .from("courses")
+  .select("*")
+  .order("position", { ascending: true })
+  .order("created_at", { ascending: false });
+
+console.log("COURSES DATA:", courses);
+console.log("COURSES ERROR:", coursesError);
 
   const { data: lessons } = await supabase
     .from("lessons")
