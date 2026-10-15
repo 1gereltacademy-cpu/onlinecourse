@@ -23,18 +23,31 @@ export default function ResetPasswordPage() {
   useEffect(() => {
     let mounted = true;
 
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!mounted) return;
+
+      if (event === "PASSWORD_RECOVERY" && session) {
+        setRecoveryMode(true);
+        setMessage("");
+        setMessageType("error");
+        setChecking(false);
+      }
+    });
+
     async function checkRecoveryLink() {
       try {
         const url = new URL(window.location.href);
-        const hasRecoveryHash = url.hash.includes("type=recovery");
         const hasCode = url.searchParams.has("code");
+        const hasRecoveryHash = url.hash.includes("type=recovery");
         const hasRecoveryType =
           url.searchParams.get("type") === "recovery";
 
         if (hasCode) {
           const code = url.searchParams.get("code");
-
-          const { error } = await supabase.auth.exchangeCodeForSession(code);
+          const { error } =
+            await supabase.auth.exchangeCodeForSession(code);
 
           if (!mounted) return;
 
@@ -43,7 +56,6 @@ export default function ResetPasswordPage() {
               "Сэргээх холбоос хүчингүй эсвэл хугацаа нь дууссан байна. Шинэ холбоос хүснэ үү."
             );
             setMessageType("error");
-            window.history.replaceState({}, "", url.pathname);
             return;
           }
 
@@ -57,20 +69,25 @@ export default function ResetPasswordPage() {
 
         if (!mounted) return;
 
-        if (!error && session && (hasRecoveryHash || hasCode || hasRecoveryType)) {
+        if (error) {
+          setMessage("Session шалгахад алдаа гарлаа. Дахин оролдоно уу.");
+          setMessageType("error");
+          return;
+        }
+
+        if (session && (hasCode || hasRecoveryHash || hasRecoveryType)) {
           setRecoveryMode(true);
           setMessage("");
-        } else if (hasRecoveryHash || hasRecoveryType || hasCode) {
-          if (!message) {
-            setMessage(
-              "Сэргээх холбоос хүчингүй эсвэл хугацаа нь дууссан байна. Шинэ холбоос хүснэ үү."
-            );
-            setMessageType("error");
-          }
+        } else if (hasCode || hasRecoveryHash || hasRecoveryType) {
+          setMessage(
+            "Сэргээх холбоос хүчингүй эсвэл хугацаа нь дууссан байна. Шинэ холбоос хүснэ үү."
+          );
+          setMessageType("error");
         }
       } catch (error) {
+        console.error("Recovery link error:", error);
+
         if (mounted) {
-          console.error("Recovery link error:", error);
           setMessage("Холбоос шалгах үед алдаа гарлаа.");
           setMessageType("error");
         }
@@ -78,19 +95,6 @@ export default function ResetPasswordPage() {
         if (mounted) setChecking(false);
       }
     }
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      if (!mounted) return;
-
-      if (event === "PASSWORD_RECOVERY" && session) {
-        setRecoveryMode(true);
-        setMessage("");
-        setMessageType("error");
-        setChecking(false);
-      }
-    });
 
     checkRecoveryLink();
 
@@ -118,7 +122,8 @@ export default function ResetPasswordPage() {
       setMessage("");
       setSuccess(false);
 
-      // Сервер талд бүртгэлтэй эсэхийг шалгана.
+      console.log("Reset email request started");
+
       const response = await fetch("/api/auth/check-reset-email", {
         method: "POST",
         headers: {
@@ -130,7 +135,11 @@ export default function ResetPasswordPage() {
       const result = await response.json();
 
       if (!response.ok) {
-        setMessage(result.error || "И-мэйл шалгах үед алдаа гарлаа.");
+        console.error("Email check API failed:", response.status, result);
+
+        setMessage(
+          result.error || "И-мэйл шалгах үед серверийн алдаа гарлаа."
+        );
         setMessageType("error");
         return;
       }
@@ -141,7 +150,6 @@ export default function ResetPasswordPage() {
         return;
       }
 
-      // Бүртгэлтэй и-мэйлд сэргээх холбоос илгээнэ.
       const { error } = await supabase.auth.resetPasswordForEmail(
         cleanEmail,
         {
@@ -151,8 +159,9 @@ export default function ResetPasswordPage() {
 
       if (error) {
         console.error("Supabase reset email error:", error.message);
+
         setMessage(
-          "Сэргээх холбоос илгээж чадсангүй. Supabase-ийн URL болон SMTP тохиргоог шалгана уу."
+          "Сэргээх холбоос илгээж чадсангүй. Supabase-ийн URL болон и-мэйл илгээх тохиргоог шалгана уу."
         );
         setMessageType("error");
         return;
@@ -165,8 +174,9 @@ export default function ResetPasswordPage() {
       setMessageType("success");
     } catch (error) {
       console.error("Reset email request error:", error);
+
       setMessage(
-        "Сервертэй холбогдох боломжгүй байна. API болон Vercel тохиргоог шалгана уу."
+        "Сервертэй холбогдож чадсангүй. Интернэт холболт болон API тохиргоог шалгана уу."
       );
       setMessageType("error");
     } finally {
@@ -195,9 +205,12 @@ export default function ResetPasswordPage() {
       setLoading(true);
       setMessage("");
 
-      const { data, error } = await supabase.auth.getSession();
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
 
-      if (error || !data.session) {
+      if (sessionError || !session) {
         setMessage(
           "Сэргээх session олдсонгүй. И-мэйлээсээ шинэ холбоос хүснэ үү."
         );
@@ -205,32 +218,37 @@ export default function ResetPasswordPage() {
         return;
       }
 
-      const { error: updateError } = await supabase.auth.updateUser({
+      const { error } = await supabase.auth.updateUser({
         password,
       });
 
-      if (updateError) {
-        console.error("Password update error:", updateError.message);
+      if (error) {
+        console.error("Password update error:", error.message);
+
         setMessage(
-          "Нууц үг шинэчлэх үед алдаа гарлаа. Холбоосын хугацааг шалгана уу."
+          "Нууц үг шинэчлэхэд алдаа гарлаа. Холбоосын хугацааг шалгана уу."
         );
         setMessageType("error");
         return;
       }
 
       setSuccess(true);
-      setMessage("Нууц үг амжилттай шинэчлэгдлээ. Нэвтрэх хуудас руу шилжинэ.");
+      setMessage(
+        "Нууц үг амжилттай шинэчлэгдлээ. Нэвтрэх хуудас руу шилжинэ."
+      );
       setMessageType("success");
+
       setPassword("");
       setConfirmPassword("");
 
       await supabase.auth.signOut();
 
-      setTimeout(() => {
+      window.setTimeout(() => {
         router.replace("/login");
       }, 1800);
     } catch (error) {
       console.error("Password reset error:", error);
+
       setMessage("Нууц үг шинэчлэх үед алдаа гарлаа.");
       setMessageType("error");
     } finally {
@@ -286,6 +304,7 @@ export default function ResetPasswordPage() {
                     <label className="mb-2 block text-sm text-slate-300">
                       Шинэ нууц үг
                     </label>
+
                     <input
                       type="password"
                       autoComplete="new-password"
@@ -303,6 +322,7 @@ export default function ResetPasswordPage() {
                     <label className="mb-2 block text-sm text-slate-300">
                       Нууц үг давтах
                     </label>
+
                     <input
                       type="password"
                       autoComplete="new-password"
@@ -320,6 +340,7 @@ export default function ResetPasswordPage() {
                   <label className="mb-2 block text-sm text-slate-300">
                     И-мэйл хаяг
                   </label>
+
                   <input
                     type="email"
                     autoComplete="email"

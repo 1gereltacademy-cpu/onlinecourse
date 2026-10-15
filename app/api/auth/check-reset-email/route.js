@@ -6,9 +6,10 @@ export const dynamic = "force-dynamic";
 
 export async function POST(request) {
   try {
-    const { email } = await request.json();
-    const cleanEmail = String(email || "").trim().toLowerCase();
+    const body = await request.json();
+    const cleanEmail = String(body.email || "").trim().toLowerCase();
 
+    // И-мэйл хаягийн форматыг шалгах
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
       return NextResponse.json(
         { error: "И-мэйл хаягаа зөв оруулна уу." },
@@ -16,48 +17,62 @@ export async function POST(request) {
       );
     }
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false,
-        },
-      }
-    );
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!url || !key) {
+      console.error("Missing Supabase server environment variables");
+
+      return NextResponse.json(
+        { error: "Серверийн тохиргоо дутуу байна." },
+        { status: 500 }
+      );
+    }
+
+    const supabase = createClient(url, key, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    });
 
     let page = 1;
     const perPage = 1000;
-    let found = false;
 
     while (true) {
-      const { data, error } =
-        await supabase.auth.admin.listUsers({
-          page,
-          perPage,
-        });
+      const { data, error } = await supabase.auth.admin.listUsers({
+        page,
+        perPage,
+      });
 
       if (error) {
-        console.error("Check reset email error:", error.message);
+        console.error("listUsers error:", error.message);
+
         return NextResponse.json(
-          { error: "И-мэйл шалгах үед серверийн алдаа гарлаа." },
+          { error: "Бүртгэл шалгах үед серверийн алдаа гарлаа." },
           { status: 500 }
         );
       }
 
-      found = data.users.some(
+      const users = data?.users || [];
+
+      const exists = users.some(
         (user) =>
-          user.email?.toLowerCase() === cleanEmail
+          user.email?.trim().toLowerCase() === cleanEmail
       );
 
-      if (found || data.users.length < perPage) break;
-      page++;
-    }
+      if (exists) {
+        return NextResponse.json({ exists: true });
+      }
 
-    return NextResponse.json({ exists: found });
+      if (users.length < perPage) {
+        return NextResponse.json({ exists: false });
+      }
+
+      page += 1;
+    }
   } catch (error) {
-    console.error("Check reset email failed:", error.message);
+    console.error("Check email API error:", error);
 
     return NextResponse.json(
       { error: "Хүсэлтийг боловсруулах боломжгүй байна." },
