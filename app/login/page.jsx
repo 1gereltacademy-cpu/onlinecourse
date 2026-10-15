@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from "react";
@@ -20,19 +21,71 @@ export default function LoginPage() {
 
   async function handleLogin(e) {
     e.preventDefault();
+
     if (loading) return;
+
+    const email = form.email.trim().toLowerCase();
+    const password = form.password;
+
+    setMessage("");
+
+    if (!email || !password) {
+      setMessage("И-мэйл болон нууц үгээ оруулна уу.");
+      return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setMessage("И-мэйл хаягаа зөв оруулна уу.");
+      return;
+    }
 
     try {
       setLoading(true);
-      setMessage("");
 
+      // 1. И-мэйл бүртгэлтэй эсэхийг серверээр шалгах
+      const response = await fetch("/api/auth/check-reset-email", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email }),
+      });
+
+      let result;
+
+      try {
+        result = await response.json();
+      } catch {
+        setMessage("Серверээс зөв хариу ирсэнгүй. Дахин оролдоно уу.");
+        return;
+      }
+
+      if (!response.ok) {
+        setMessage(
+          result?.error || "И-мэйл шалгах үед серверийн алдаа гарлаа."
+        );
+        return;
+      }
+
+      if (result?.exists !== true) {
+        setMessage(
+          "Энэ и-мэйл хаягаар бүртгэл олдсонгүй. Эхлээд бүртгүүлнэ үү."
+        );
+        return;
+      }
+
+      // 2. И-мэйл бүртгэлтэй бол нэвтрэх мэдээллийг шалгах
       const { data, error } = await supabase.auth.signInWithPassword({
-        email: form.email.trim(),
-        password: form.password,
+        email,
+        password,
       });
 
       if (error) {
-        setMessage(error.message);
+        if (error.message === "Invalid login credentials") {
+          setMessage("Нууц үг буруу байна. Дахин шалгана уу.");
+        } else {
+          setMessage(error.message || "Нэвтрэх үед алдаа гарлаа.");
+        }
         return;
       }
 
@@ -44,21 +97,27 @@ export default function LoginPage() {
         return;
       }
 
-      document.cookie = `sb-access-token=${session.access_token}; path=/;`;
+      document.cookie = `sb-access-token=${session.access_token}; path=/; SameSite=Lax`;
 
       window.location.href = "/";
     } catch (err) {
-      setMessage(err.message || "Алдаа гарлаа.");
+      console.error("Login error:", err);
+      setMessage("Сервертэй холбогдож чадсангүй. Дахин оролдоно уу.");
     } finally {
       setLoading(false);
     }
   }
 
   async function handleForgotPassword() {
-    const email = form.email.trim();
+    const email = form.email.trim().toLowerCase();
 
     if (!email) {
       setResetMessage("Нууц үг сэргээхдээ эхлээд и-мэйл хаягаа оруулна уу.");
+      return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setResetMessage("И-мэйл хаягаа зөв оруулна уу.");
       return;
     }
 
@@ -71,16 +130,19 @@ export default function LoginPage() {
       });
 
       if (error) {
-        console.error("reset password error:", error);
-        setResetMessage(error.message);
+        console.error("Reset password error:", error);
+        setResetMessage(
+          "Нууц үг сэргээх хүсэлт амжилтгүй боллоо. Дахин оролдоно уу."
+        );
         return;
       }
 
       setResetMessage(
-        "Нууц үг сэргээх холбоос таны и-мэйл рүү илгээгдлээ. И-мэйлээ шалгана уу."
+        "Хэрэв энэ хаяг бүртгэлтэй бол нууц үг сэргээх холбоос илгээгдэнэ. И-мэйлээ шалгана уу."
       );
     } catch (err) {
-      setResetMessage(err.message || "Нууц үг сэргээх үед алдаа гарлаа.");
+      console.error("Forgot password error:", err);
+      setResetMessage("Нууц үг сэргээх үед алдаа гарлаа. Дахин оролдоно уу.");
     } finally {
       setResetLoading(false);
     }
@@ -89,7 +151,9 @@ export default function LoginPage() {
   return (
     <main className="relative min-h-screen overflow-hidden bg-slate-950 text-white">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(99,102,241,0.25),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(16,185,129,0.18),transparent_30%),linear-gradient(to_bottom,#020617,#0f172a,#020617)]" />
+
       <div className="absolute left-[-100px] top-[100px] h-72 w-72 rounded-full bg-indigo-500/20 blur-3xl" />
+
       <div className="absolute bottom-[-120px] right-[-60px] h-80 w-80 rounded-full bg-emerald-500/10 blur-3xl" />
 
       <div className="relative mx-auto grid min-h-screen max-w-7xl items-center gap-8 px-4 py-8 sm:px-6 sm:py-10 lg:grid-cols-2 lg:gap-10">
@@ -100,7 +164,9 @@ export default function LoginPage() {
 
           <h1 className="mt-6 text-4xl font-bold leading-tight xl:text-6xl">
             Мэдлэгээрээ
-            <span className="block bg-gradient-to-r from-indigo-300 to-emerald-300 bg-clip-text text-transparent">ирээдүйгээ бүтээ</span>
+            <span className="block bg-gradient-to-r from-indigo-300 to-emerald-300 bg-clip-text text-transparent">
+              ирээдүйгээ бүтээ
+            </span>
           </h1>
 
           <p className="mt-5 max-w-xl text-lg leading-8 text-slate-300">
@@ -133,7 +199,9 @@ export default function LoginPage() {
                 Хэрэглэгчийн нэвтрэх хэсэг
               </div>
 
-              <h1 className="mt-4 text-3xl font-bold md:text-4xl">Нэвтрэх</h1>
+              <h1 className="mt-4 text-3xl font-bold md:text-4xl">
+                Нэвтрэх
+              </h1>
 
               <p className="mt-2 text-sm text-slate-400 sm:text-base">
                 Өөрийн бүртгэлээр нэвтэрч, сургалтуудаа үргэлжлүүлээрэй.
@@ -145,14 +213,18 @@ export default function LoginPage() {
                 <label className="mb-2 block text-sm text-slate-300">
                   И-мэйл хаяг
                 </label>
+
                 <input
                   type="email"
+                  autoComplete="email"
+                  required
                   className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-indigo-400/50 focus:bg-white/10"
                   placeholder="name@example.com"
                   value={form.email}
-                  onChange={(e) =>
-                    setForm({ ...form, email: e.target.value })
-                  }
+                  onChange={(e) => {
+                    setForm({ ...form, email: e.target.value });
+                    setMessage("");
+                  }}
                 />
               </div>
 
@@ -160,14 +232,18 @@ export default function LoginPage() {
                 <label className="mb-2 block text-sm text-slate-300">
                   Нууц үг
                 </label>
+
                 <input
                   type="password"
+                  autoComplete="current-password"
+                  required
                   className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-indigo-400/50 focus:bg-white/10"
                   placeholder="••••••••"
                   value={form.password}
-                  onChange={(e) =>
-                    setForm({ ...form, password: e.target.value })
-                  }
+                  onChange={(e) => {
+                    setForm({ ...form, password: e.target.value });
+                    setMessage("");
+                  }}
                 />
               </div>
 
@@ -183,13 +259,19 @@ export default function LoginPage() {
               </div>
 
               {message ? (
-                <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-200">
+                <div
+                  role="alert"
+                  className="break-words rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-200"
+                >
                   {message}
                 </div>
               ) : null}
 
               {resetMessage ? (
-                <div className="break-words whitespace-pre-wrap rounded-2xl border border-indigo-400/20 bg-indigo-400/10 px-4 py-3 text-sm text-indigo-200">
+                <div
+                  role="status"
+                  className="break-words whitespace-pre-wrap rounded-2xl border border-indigo-400/20 bg-indigo-400/10 px-4 py-3 text-sm text-indigo-200"
+                >
                   {resetMessage}
                 </div>
               ) : null}
@@ -199,7 +281,7 @@ export default function LoginPage() {
                 disabled={loading}
                 className="w-full rounded-2xl bg-white py-3 font-semibold text-slate-900 transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {loading ? "Нэвтэрч байна..." : "Нэвтрэх"}
+                {loading ? "Шалгаж байна..." : "Нэвтрэх"}
               </button>
             </form>
 
