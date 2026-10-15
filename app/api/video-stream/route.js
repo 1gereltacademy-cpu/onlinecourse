@@ -185,6 +185,8 @@ if (!upstream.ok && upstream.status !== 206) {
     status: upstream.status,
     details: details.slice(0, 1000),
     lessonId,
+    method: req.method,
+    range: req.headers.get("range"),
   });
 
   return NextResponse.json(
