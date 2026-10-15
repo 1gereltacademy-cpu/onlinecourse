@@ -1,6 +1,7 @@
+
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { getSupabaseBrowser } from "@/lib/supabase-browser";
 
 export default function PaymentRequestButton({
@@ -8,29 +9,28 @@ export default function PaymentRequestButton({
   courseId,
   amountMnt,
 }) {
-  const supabase = getSupabaseBrowser();
-
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
   const [existingOrder, setExistingOrder] = useState(null);
-
-  const startedRef = useRef(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
-    if (!userId || !courseId) {
-      setExistingOrder(null);
-      setChecking(false);
-      return;
-    }
-
-    if (startedRef.current) return;
-    startedRef.current = true;
+    let cancelled = false;
 
     async function loadExistingRequest() {
+      if (!userId || !courseId) {
+        setExistingOrder(null);
+        setChecking(false);
+        return;
+      }
+
       try {
         setChecking(true);
+        setErrorMessage("");
 
-        const { data } = await supabase
+        const supabase = getSupabaseBrowser();
+
+        const { data, error } = await supabase
           .from("payment_orders")
           .select("id, status")
           .eq("user_id", userId)
@@ -39,22 +39,37 @@ export default function PaymentRequestButton({
           .limit(1)
           .maybeSingle();
 
-        setExistingOrder(data || null);
+        if (error) throw error;
+
+        if (!cancelled) {
+          setExistingOrder(data || null);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setErrorMessage(error.message || "Хүсэлт шалгахад алдаа гарлаа.");
+        }
       } finally {
-        setChecking(false);
+        if (!cancelled) setChecking(false);
       }
     }
 
     loadExistingRequest();
-  }, [userId, courseId, supabase]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, courseId]);
 
   async function handleCreateRequest() {
-    if (loading || checking) return;
+    if (loading || checking || !userId || !courseId) return;
 
     try {
       setLoading(true);
+      setErrorMessage("");
 
-      const { data: alreadyExists } = await supabase
+      const supabase = getSupabaseBrowser();
+
+      const { data: alreadyExists, error: checkError } = await supabase
         .from("payment_orders")
         .select("id, status")
         .eq("user_id", userId)
@@ -63,12 +78,14 @@ export default function PaymentRequestButton({
         .limit(1)
         .maybeSingle();
 
+      if (checkError) throw checkError;
+
       if (alreadyExists) {
         setExistingOrder(alreadyExists);
         return;
       }
 
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("payment_orders")
         .insert({
           user_id: userId,
@@ -76,27 +93,44 @@ export default function PaymentRequestButton({
           amount_mnt: amountMnt || 0,
           status: "pending",
         })
-        .select()
+        .select("id, status")
         .single();
 
+      if (error) throw error;
+
       setExistingOrder(data);
+    } catch (error) {
+      console.error("Payment request error:", error);
+      setErrorMessage(
+        error.message || "Төлбөрийн хүсэлт үүсгэхэд алдаа гарлаа."
+      );
     } finally {
       setLoading(false);
     }
   }
 
   async function handleCancelRequest() {
-    if (!existingOrder) return;
+    if (!existingOrder || loading) return;
 
     try {
       setLoading(true);
+      setErrorMessage("");
 
-      await supabase
+      const supabase = getSupabaseBrowser();
+
+      const { error } = await supabase
         .from("payment_orders")
         .delete()
-        .eq("id", existingOrder.id);
+        .eq("id", existingOrder.id)
+        .eq("user_id", userId)
+        .eq("status", "pending");
+
+      if (error) throw error;
 
       setExistingOrder(null);
+    } catch (error) {
+      console.error("Cancel payment request error:", error);
+      setErrorMessage(error.message || "Хүсэлт цуцлахад алдаа гарлаа.");
     } finally {
       setLoading(false);
     }
@@ -107,44 +141,50 @@ export default function PaymentRequestButton({
   }
 
   if (checking) {
-    return <div>Шалгаж байна...</div>;
-  }
-
-  if (existingOrder) {
-    const isPaid =
-      existingOrder.status === "approved" || existingOrder.status === "paid";
-
-    return (
-      <div className="space-y-3">
-        <div
-          className={`rounded-2xl px-4 py-3 text-sm ${
-            isPaid
-              ? "bg-emerald-500/20 text-emerald-200"
-              : "bg-amber-500/20 text-amber-200"
-          }`}
-        >
-          {isPaid ? "✅ Төлбөр баталгаажсан" : "⏳ Хүсэлт илгээгдсэн"}
-        </div>
-
-        {!isPaid && (
-          <button
-            onClick={handleCancelRequest}
-            className="rounded-2xl bg-red-500 px-4 py-2 text-white"
-          >
-            ❌ Хүсэлт цуцлах
-          </button>
-        )}
-      </div>
-    );
+    return <div>Хүсэлтийг шалгаж байна...</div>;
   }
 
   return (
-    <button
-      onClick={handleCreateRequest}
-      disabled={loading}
-      className="rounded-2xl bg-white px-4 py-3 font-semibold text-slate-900"
-    >
-      {loading ? "Илгээж байна..." : "Төлбөрийн хүсэлт үүсгэх"}
-    </button>
+    <div className="space-y-3">
+      {errorMessage && (
+        <div className="rounded-xl bg-red-500/10 p-3 text-sm text-red-300">
+          {errorMessage}
+        </div>
+      )}
+
+      {existingOrder ? (
+        <>
+          <div
+            className={`rounded-2xl px-4 py-3 text-sm ${
+              ["approved", "paid"].includes(existingOrder.status)
+                ? "bg-emerald-500/20 text-emerald-200"
+                : "bg-amber-500/20 text-amber-200"
+            }`}
+          >
+            {["approved", "paid"].includes(existingOrder.status)
+              ? "✅ Төлбөр баталгаажсан"
+              : "⏳ Хүсэлт илгээгдсэн"}
+          </div>
+
+          {existingOrder.status === "pending" && (
+            <button
+              onClick={handleCancelRequest}
+              disabled={loading}
+              className="rounded-2xl bg-red-500 px-4 py-2 text-white disabled:opacity-50"
+            >
+              {loading ? "Түр хүлээнэ үү..." : "❌ Хүсэлт цуцлах"}
+            </button>
+          )}
+        </>
+      ) : (
+        <button
+          onClick={handleCreateRequest}
+          disabled={loading}
+          className="rounded-2xl bg-white px-4 py-3 font-semibold text-slate-900 disabled:opacity-50"
+        >
+          {loading ? "Илгээж байна..." : "Төлбөрийн хүсэлт үүсгэх"}
+        </button>
+      )}
+    </div>
   );
 }
