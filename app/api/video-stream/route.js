@@ -56,7 +56,7 @@ async function handleVideoRequest(req, { headOnly = false } = {}) {
       return jsonError("Видео зам буруу байна", 403);
     }
 
-    // Preview биш видеонд нэвтрэлт болон сургалтын эрх шалгана.
+    // Preview биш видеонд хэрэглэгчийн эрх шалгана.
     if (!lesson.is_preview) {
       const token = req.cookies.get("sb-access-token")?.value;
 
@@ -113,10 +113,7 @@ async function handleVideoRequest(req, { headOnly = false } = {}) {
             .maybeSingle();
 
         if (enrollmentError) {
-          console.error(
-            "Enrollment lookup error:",
-            enrollmentError.message
-          );
+          console.error("Enrollment lookup error:", enrollmentError.message);
           return jsonError("Сургалтын эрх шалгахад алдаа гарлаа", 500);
         }
 
@@ -128,7 +125,7 @@ async function handleVideoRequest(req, { headOnly = false } = {}) {
       }
     }
 
-    // Private Storage-оос хугацаатай signed URL үүсгэнэ.
+    // Private Storage-оос signed URL үүсгэнэ.
     const { data: signed, error: signedError } =
       await serviceClient.storage
         .from("videos-private")
@@ -143,7 +140,6 @@ async function handleVideoRequest(req, { headOnly = false } = {}) {
       return jsonError("Видео холбоос үүсгэж чадсангүй", 502);
     }
 
-    // Үүссэн URL зөв Supabase төслийн домэйнтэй эсэхийг шалгана.
     let signedUrl;
     let configuredUrl;
 
@@ -163,14 +159,52 @@ async function handleVideoRequest(req, { headOnly = false } = {}) {
       return jsonError("Видео хадгалах сервер таарахгүй байна", 502);
     }
 
-    const upstreamHeaders = new Headers();
+    // Оношилгоо: token болон signed URL-г логт хэзээ ч хэвлэхгүй.
+    try {
+      const token = signedUrl.searchParams.get("token");
+
+      if (!token) {
+        console.error("Video signed URL diagnostics:", {
+          hasToken: false,
+          storageHost: signedUrl.hostname,
+        });
+      } else {
+        const parts = token.split(".");
+        const payloadPart = parts[1];
+
+        if (!payloadPart) {
+          throw new Error("JWT payload missing");
+        }
+
+        const payload = JSON.parse(
+          Buffer.from(payloadPart, "base64url").toString("utf8")
+        );
+
+        const now = Math.floor(Date.now() / 1000);
+
+        console.log("Video signed URL diagnostics:", {
+          issuedAt: payload.iat ?? null,
+          expiresAt: payload.exp ?? null,
+          serverNow: now,
+          secondsUntilExpiry:
+            typeof payload.exp === "number" ? payload.exp - now : null,
+          storageHost: signedUrl.hostname,
+        });
+      }
+    } catch (error) {
+      console.error("Video signed URL diagnostic parse failed:", {
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+
+    // Browser-оос ирсэн Range хүсэлтийг дамжуулна.
     const range = req.headers.get("range");
+    const upstreamHeaders = new Headers();
 
     if (range) {
       upstreamHeaders.set("Range", range);
     }
 
-    // HEAD хүсэлтэд видеоны бүх өгөгдлийг татахгүй.
     const upstream = await fetch(signedUrl.toString(), {
       method: headOnly ? "HEAD" : "GET",
       headers: upstreamHeaders,
@@ -193,18 +227,12 @@ async function handleVideoRequest(req, { headOnly = false } = {}) {
       return jsonError("Видео файлыг уншиж чадсангүй", 502);
     }
 
-    const headers = new Headers();
-
-    headers.set(
-      "Content-Type",
-      upstream.headers.get("content-type") || "video/mp4"
-    );
-    headers.set(
-      "Accept-Ranges",
-      upstream.headers.get("accept-ranges") || "bytes"
-    );
-    headers.set("Cache-Control", "private, no-store");
-    headers.set("X-Content-Type-Options", "nosniff");
+    const headers = new Headers({
+      "Content-Type": upstream.headers.get("content-type") || "video/mp4",
+      "Accept-Ranges": upstream.headers.get("accept-ranges") || "bytes",
+      "Cache-Control": "private, no-store",
+      "X-Content-Type-Options": "nosniff",
+    });
 
     const contentLength = upstream.headers.get("content-length");
     const contentRange = upstream.headers.get("content-range");
