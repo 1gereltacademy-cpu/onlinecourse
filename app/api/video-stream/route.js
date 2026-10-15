@@ -177,14 +177,22 @@ export async function GET(req) {
       redirect: "follow",
     });
 
-    if (!upstream.ok && upstream.status !== 206) {
-      console.error("Storage video response:", upstream.status);
+    
+if (!upstream.ok && upstream.status !== 206) {
+  const details = await upstream.clone().text().catch(() => "");
 
-      return NextResponse.json(
-        { error: "Видео файлыг уншиж чадсангүй" },
-        { status: 502 }
-      );
-    }
+  console.error("Storage video response:", {
+    status: upstream.status,
+    details: details.slice(0, 1000),
+    lessonId,
+  });
+
+  return NextResponse.json(
+    { error: "Видео файлыг уншиж чадсангүй" },
+    { status: 502 }
+  );
+}
+
 
     // Видео тоглуулагчид шаардлагатай толгой мэдээллүүд
     const headers = new Headers({
