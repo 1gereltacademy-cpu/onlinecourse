@@ -5,31 +5,38 @@ import { createClient } from "@supabase/supabase-js";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(req) {
+function jsonError(message, status) {
+  return NextResponse.json({ error: message }, { status });
+}
+
+function getServiceClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !serviceKey) {
+    throw new Error("Supabase server environment variables are missing");
+  }
+
+  return createClient(supabaseUrl, serviceKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  });
+}
+
+async function handleVideoRequest(req, { headOnly = false } = {}) {
   try {
     const { searchParams } = new URL(req.url);
     const path = searchParams.get("path");
     const lessonId = searchParams.get("lessonId");
 
     if (!path || !lessonId) {
-      return NextResponse.json(
-        { error: "path эсвэл lessonId байхгүй" },
-        { status: 400 }
-      );
+      return jsonError("path эсвэл lessonId байхгүй", 400);
     }
 
-    const serviceClient = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY,
-      {
-        auth: {
-          persistSession: false,
-          autoRefreshToken: false,
-        },
-      }
-    );
+    const serviceClient = getServiceClient();
 
-    // Хичээлийг олно
     const { data: lesson, error: lessonError } = await serviceClient
       .from("lessons")
       .select("id, course_id, is_preview, video_path")
@@ -38,49 +45,39 @@ export async function GET(req) {
 
     if (lessonError) {
       console.error("Video lesson lookup error:", lessonError.message);
-
-      return NextResponse.json(
-        { error: "Хичээл шалгахад алдаа гарлаа" },
-        { status: 500 }
-      );
+      return jsonError("Хичээл шалгахад алдаа гарлаа", 500);
     }
 
     if (!lesson) {
-      return NextResponse.json(
-        { error: "Хичээл олдсонгүй" },
-        { status: 404 }
-      );
+      return jsonError("Хичээл олдсонгүй", 404);
     }
 
-    // URL-д дур мэдэн өөр файлын зам өгөхөөс хамгаална
     if (!lesson.video_path || lesson.video_path !== path) {
-      return NextResponse.json(
-        { error: "Видео зам буруу байна" },
-        { status: 403 }
-      );
+      return jsonError("Видео зам буруу байна", 403);
     }
 
-    // Preview биш видеонд хэрэглэгчийн эрх шалгана
+    // Preview биш видеонд нэвтрэлт болон сургалтын эрх шалгана.
     if (!lesson.is_preview) {
       const token = req.cookies.get("sb-access-token")?.value;
 
       if (!token) {
-        return NextResponse.json(
-          { error: "Нэвтэрнэ үү" },
-          { status: 401 }
-        );
+        return jsonError("Нэвтэрнэ үү", 401);
       }
 
-      const authClient = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-        {
-          auth: {
-            persistSession: false,
-            autoRefreshToken: false,
-          },
-        }
-      );
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+      if (!supabaseUrl || !anonKey) {
+        console.error("Supabase public environment variables are missing");
+        return jsonError("Нэвтрэлтийн тохиргоонд алдаа гарлаа", 500);
+      }
+
+      const authClient = createClient(supabaseUrl, anonKey, {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+        },
+      });
 
       const {
         data: { user },
@@ -88,10 +85,7 @@ export async function GET(req) {
       } = await authClient.auth.getUser(token);
 
       if (authError || !user) {
-        return NextResponse.json(
-          { error: "Нэвтрэлт хүчингүй байна" },
-          { status: 401 }
-        );
+        return jsonError("Нэвтрэлт хүчингүй байна", 401);
       }
 
       const { data: profile, error: profileError } = await serviceClient
@@ -102,11 +96,7 @@ export async function GET(req) {
 
       if (profileError) {
         console.error("Profile lookup error:", profileError.message);
-
-        return NextResponse.json(
-          { error: "Хэрэглэгчийн эрх шалгахад алдаа гарлаа" },
-          { status: 500 }
-        );
+        return jsonError("Хэрэглэгчийн эрх шалгахад алдаа гарлаа", 500);
       }
 
       let hasAccess = profile?.role === "admin";
@@ -119,6 +109,7 @@ export async function GET(req) {
             .eq("user_id", user.id)
             .eq("course_id", lesson.course_id)
             .in("payment_status", ["paid", "approved"])
+            .limit(1)
             .maybeSingle();
 
         if (enrollmentError) {
@@ -126,85 +117,94 @@ export async function GET(req) {
             "Enrollment lookup error:",
             enrollmentError.message
           );
-
-          return NextResponse.json(
-            { error: "Сургалтын эрх шалгахад алдаа гарлаа" },
-            { status: 500 }
-          );
+          return jsonError("Сургалтын эрх шалгахад алдаа гарлаа", 500);
         }
 
         hasAccess = Boolean(enrollment);
       }
 
       if (!hasAccess) {
-        return NextResponse.json(
-          { error: "Энэ видеог үзэх эрхгүй байна" },
-          { status: 403 }
-        );
+        return jsonError("Энэ видеог үзэх эрхгүй байна", 403);
       }
     }
 
-    // Хугацаатай signed URL үүсгэнэ
+    // Private Storage-оос хугацаатай signed URL үүсгэнэ.
     const { data: signed, error: signedError } =
       await serviceClient.storage
         .from("videos-private")
-        .createSignedUrl(path, 60 * 10);
+        .createSignedUrl(path, 600);
 
     if (signedError || !signed?.signedUrl) {
-      console.error(
-        "Create signed URL error:",
-        signedError?.message
-      );
+      console.error("Create signed URL error:", {
+        message: signedError?.message,
+        status: signedError?.status,
+      });
 
-      return NextResponse.json(
-        { error: "Видео холбоос үүсгэж чадсангүй" },
-        { status: 500 }
-      );
+      return jsonError("Видео холбоос үүсгэж чадсангүй", 502);
     }
 
-    // Browser-оос ирсэн Range хүсэлтийг Storage руу дамжуулна
-    const range = req.headers.get("range");
+    // Үүссэн URL зөв Supabase төслийн домэйнтэй эсэхийг шалгана.
+    let signedUrl;
+    let configuredUrl;
+
+    try {
+      signedUrl = new URL(signed.signedUrl);
+      configuredUrl = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL);
+    } catch {
+      console.error("Invalid Supabase URL configuration");
+      return jsonError("Видео серверийн тохиргоо буруу байна", 500);
+    }
+
+    if (
+      signedUrl.protocol !== "https:" ||
+      signedUrl.hostname !== configuredUrl.hostname
+    ) {
+      console.error("Signed URL hostname or protocol mismatch");
+      return jsonError("Видео хадгалах сервер таарахгүй байна", 502);
+    }
+
     const upstreamHeaders = new Headers();
+    const range = req.headers.get("range");
 
     if (range) {
       upstreamHeaders.set("Range", range);
     }
 
-    const upstream = await fetch(signed.signedUrl, {
-      method: "GET",
+    // HEAD хүсэлтэд видеоны бүх өгөгдлийг татахгүй.
+    const upstream = await fetch(signedUrl.toString(), {
+      method: headOnly ? "HEAD" : "GET",
       headers: upstreamHeaders,
       cache: "no-store",
       redirect: "follow",
     });
 
-    
-if (!upstream.ok && upstream.status !== 206) {
-  const details = await upstream.clone().text().catch(() => "");
+    if (!upstream.ok && upstream.status !== 206) {
+      const details = await upstream.clone().text().catch(() => "");
 
-  console.error("Storage video response:", {
-    status: upstream.status,
-    details: details.slice(0, 1000),
-    lessonId,
-    method: req.method,
-    range: req.headers.get("range"),
-  });
+      console.error("Storage video response:", {
+        status: upstream.status,
+        details: details.slice(0, 1000),
+        lessonId,
+        method: headOnly ? "HEAD" : "GET",
+        range: range || null,
+        storageHost: signedUrl.hostname,
+      });
 
-  return NextResponse.json(
-    { error: "Видео файлыг уншиж чадсангүй" },
-    { status: 502 }
-  );
-}
+      return jsonError("Видео файлыг уншиж чадсангүй", 502);
+    }
 
+    const headers = new Headers();
 
-    // Видео тоглуулагчид шаардлагатай толгой мэдээллүүд
-    const headers = new Headers({
-      "Content-Type":
-        upstream.headers.get("content-type") || "video/mp4",
-      "Accept-Ranges":
-        upstream.headers.get("accept-ranges") || "bytes",
-      "Cache-Control": "private, no-store",
-      "X-Content-Type-Options": "nosniff",
-    });
+    headers.set(
+      "Content-Type",
+      upstream.headers.get("content-type") || "video/mp4"
+    );
+    headers.set(
+      "Accept-Ranges",
+      upstream.headers.get("accept-ranges") || "bytes"
+    );
+    headers.set("Cache-Control", "private, no-store");
+    headers.set("X-Content-Type-Options", "nosniff");
 
     const contentLength = upstream.headers.get("content-length");
     const contentRange = upstream.headers.get("content-range");
@@ -217,16 +217,23 @@ if (!upstream.ok && upstream.status !== 206) {
       headers.set("Content-Range", contentRange);
     }
 
-    return new Response(upstream.body, {
+    return new Response(headOnly ? null : upstream.body, {
       status: upstream.status,
       headers,
     });
   } catch (error) {
-    console.error("Video stream error:", error);
+    console.error("Video stream error:", {
+      message: error instanceof Error ? error.message : "Unknown error",
+    });
 
-    return NextResponse.json(
-      { error: "Видео дамжуулах үед серверийн алдаа гарлаа" },
-      { status: 500 }
-    );
+    return jsonError("Видео дамжуулах үед серверийн алдаа гарлаа", 500);
   }
+}
+
+export async function GET(req) {
+  return handleVideoRequest(req);
+}
+
+export async function HEAD(req) {
+  return handleVideoRequest(req, { headOnly: true });
 }
